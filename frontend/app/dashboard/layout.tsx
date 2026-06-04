@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { LogOut, FileText, Home, Settings, BarChart3 } from 'lucide-react'
+import { LogOut, FileText, Home, Settings } from 'lucide-react'
 
 export default function DashboardLayout({
   children,
@@ -12,49 +12,54 @@ export default function DashboardLayout({
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = React.useState<any>(null)
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
+  const [adminUser, setAdminUser] = React.useState<{ name: string; email: string } | null>(null)
+
+  const isSettings = pathname?.startsWith('/dashboard/settings')
 
   React.useEffect(() => {
     const userData = localStorage.getItem('user')
-    if (!userData) {
-      router.push('/')
-      return
+    if (userData) {
+      try {
+        setAdminUser(JSON.parse(userData))
+      } catch {
+        setAdminUser(null)
+      }
     }
-    setUser(JSON.parse(userData))
-  }, [router])
+  }, [pathname])
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user')
-    router.push('/')
+    setAdminUser(null)
+    if (isSettings) router.push('/dashboard/settings')
   }
-
-  if (!user) return null
 
   const menuItems = [
     { icon: Home, label: 'Dashboard', href: '/dashboard' },
     { icon: FileText, label: 'Claims', href: '/dashboard/claims' },
-    { icon: BarChart3, label: 'Analytics', href: '/dashboard/analytics' },
-    { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
+    { icon: Settings, label: 'Admin Settings', href: '/dashboard/settings' },
   ]
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 border-r border-border bg-card/50 flex flex-col`}>
+      <aside
+        className={`${sidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 border-r border-border bg-card/50 flex flex-col`}
+      >
         <div className="p-6">
           {sidebarOpen && (
             <>
               <h2 className="text-lg font-bold">Plum OPD</h2>
-              <p className="text-xs text-muted-foreground">v1.0</p>
+              <p className="text-xs text-muted-foreground">Claim adjudication</p>
             </>
           )}
         </div>
 
         <nav className="flex-1 space-y-2 px-3">
           {menuItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive =
+              pathname === item.href ||
+              (item.href === '/dashboard/claims' && pathname?.startsWith('/dashboard/claims'))
             return (
               <button
                 key={item.label}
@@ -72,33 +77,32 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        <div className="p-3 border-t border-border">
-          <Button
-            variant="ghost"
-            className="w-full justify-center text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleLogout}
-            size="sm"
-          >
-            <LogOut className="h-4 w-4" />
-            {sidebarOpen && <span className="ml-2">Logout</span>}
-          </Button>
-        </div>
+        {adminUser && (
+          <div className="p-3 border-t border-border">
+            <Button
+              variant="ghost"
+              className="w-full justify-center text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleLogout}
+              size="sm"
+            >
+              <LogOut className="h-4 w-4" />
+              {sidebarOpen && <span className="ml-2">Logout</span>}
+            </Button>
+          </div>
+        )}
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Topbar */}
         <header className="border-b border-border bg-card/50 sticky top-0 z-10">
           <div className="flex items-center justify-between px-6 py-4">
             <h1 className="text-lg font-semibold">Claim Adjudication System</h1>
-            <div className="text-sm text-muted-foreground">Welcome, {user?.name}</div>
+            <div className="text-sm text-muted-foreground">
+              {adminUser ? `Admin: ${adminUser.name}` : 'Public access'}
+            </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-auto p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>
   )

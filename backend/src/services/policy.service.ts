@@ -9,7 +9,7 @@ let cachedActivePolicy: Record<string, any> | null = null;
 export class PolicyService {
   /**
    * Load active policy from cache or DB.
-   * If none exists, seeds it from the 'project guide/policy_terms.json' file.
+   * If none exists, seeds it from backend/src/data/policy_terms.json.
    */
   static async getActivePolicy(): Promise<Record<string, any>> {
     if (cachedActivePolicy) {
@@ -31,7 +31,7 @@ export class PolicyService {
    */
   private static async seedInitialPolicy(): Promise<IPolicy> {
     try {
-      const defaultTermsPath = path.resolve(__dirname, '../../../project guide/policy_terms.json');
+      const defaultTermsPath = path.resolve(__dirname, '../data/policy_terms.json');
       const raw = fs.readFileSync(defaultTermsPath, 'utf-8');
       const config = JSON.parse(raw);
 

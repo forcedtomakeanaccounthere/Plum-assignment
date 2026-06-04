@@ -1,7 +1,7 @@
 import { Schema, model, Document } from 'mongoose';
 
 export interface IDocumentDetail {
-  type: 'prescription' | 'bill' | 'lab_report' | 'pharmacy_bill';
+  type: 'prescription' | 'bill' | 'lab_report' | 'pharmacy_bill' | 'supporting';
   cloudinaryUrl: string;
   ocrText: string;
   extractedFields: Record<string, any>;
@@ -82,7 +82,7 @@ const ClaimSchema = new Schema<IClaim>(
     cashlessRequest: { type: Boolean, default: false },
     documents: [
       {
-        type: { type: String, enum: ['prescription', 'bill', 'lab_report', 'pharmacy_bill'], required: true },
+        type: { type: String, enum: ['prescription', 'bill', 'lab_report', 'pharmacy_bill', 'supporting'], required: true },
         cloudinaryUrl: { type: String, required: true },
         ocrText: { type: String, default: '' },
         extractedFields: { type: Schema.Types.Mixed, default: {} },

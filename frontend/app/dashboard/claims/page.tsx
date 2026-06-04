@@ -1,28 +1,50 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Plus, Search, Filter, ChevronRight } from 'lucide-react'
+import { Plus, Search, ChevronRight, Loader } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import {
+  fetchClaims,
+  formatCurrency,
+  formatRelativeDate,
+  mapStatus,
+  type Claim,
+} from '@/lib/api'
 
 export default function ClaimsPage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [claims, setClaims] = useState<Claim[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const claims = [
-    { id: 'CLM-001', patient: 'John Doe', amount: '$1,200', status: 'approved', date: '2 hours ago' },
-    { id: 'CLM-002', patient: 'Jane Smith', amount: '$850', status: 'pending', date: '4 hours ago' },
-    { id: 'CLM-003', patient: 'Bob Wilson', amount: '$2,100', status: 'processing', date: '1 day ago' },
-    { id: 'CLM-004', patient: 'Alice Brown', amount: '$1,500', status: 'approved', date: '2 days ago' },
-    { id: 'CLM-005', patient: 'Charlie Davis', amount: '$950', status: 'rejected', date: '3 days ago' },
-    { id: 'CLM-006', patient: 'Eva Martinez', amount: '$3,200', status: 'processing', date: '3 days ago' },
-  ]
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        setLoading(true)
+        const res = await fetchClaims({ limit: 100 })
+        if (!cancelled) setClaims(res.claims)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load claims')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-  const filteredClaims = claims.filter(claim => {
-    const matchesSearch = claim.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         claim.patient.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || claim.status === statusFilter
+  const filteredClaims = claims.filter((claim) => {
+    const status = mapStatus(claim)
+    const matchesSearch =
+      claim.claimId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      claim.memberName.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || status === statusFilter
     return matchesSearch && matchesStatus
   })
 
@@ -36,6 +58,8 @@ export default function ClaimsPage() {
         return { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgba(59, 130, 246, 0.3)', text: '#3b82f6' }
       case 'rejected':
         return { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#ef4444' }
+      case 'partial':
+        return { bg: 'rgba(168, 85, 247, 0.1)', border: 'rgba(168, 85, 247, 0.3)', text: '#a855f7' }
       default:
         return { bg: 'rgba(107, 114, 128, 0.1)', border: 'rgba(107, 114, 128, 0.3)', text: '#6b7280' }
     }
@@ -43,7 +67,6 @@ export default function ClaimsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Claims</h1>
@@ -55,7 +78,12 @@ export default function ClaimsPage() {
         </Button>
       </div>
 
-      {/* Filters & Search */}
+      {error && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       <div className="glass rounded-lg border border-border p-4 space-y-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 flex items-center gap-2 bg-input rounded-lg px-3 py-2">
@@ -68,7 +96,6 @@ export default function ClaimsPage() {
               className="flex-1 bg-transparent outline-none text-sm"
             />
           </div>
-          
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -79,71 +106,79 @@ export default function ClaimsPage() {
             <option value="pending">Pending</option>
             <option value="processing">Processing</option>
             <option value="rejected">Rejected</option>
+            <option value="partial">Partial</option>
           </select>
         </div>
-        
         <div className="text-sm text-muted-foreground">
           Showing {filteredClaims.length} of {claims.length} claims
         </div>
       </div>
 
-      {/* Claims Table */}
-      <div className="glass rounded-lg border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-border bg-secondary/10">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">CLAIM ID</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">PATIENT</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">AMOUNT</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">STATUS</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">SUBMITTED</th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground">ACTION</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredClaims.map((claim) => {
-                const statusColor = getStatusColor(claim.status)
-                return (
-                  <tr key={claim.id} className="hover:bg-secondary/10 transition-colors duration-200">
-                    <td className="px-6 py-4 text-sm font-semibold">{claim.id}</td>
-                    <td className="px-6 py-4 text-sm">{claim.patient}</td>
-                    <td className="px-6 py-4 text-sm font-medium">{claim.amount}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span
-                        className="inline-block px-3 py-1 rounded-full border text-xs font-medium capitalize"
-                        style={{
-                          backgroundColor: statusColor.bg,
-                          borderColor: statusColor.border,
-                          color: statusColor.text
-                        }}
-                      >
-                        {claim.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{claim.date}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => router.push(`/dashboard/claims/${claim.id}`)}
-                        className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
-                      >
-                        <span className="text-sm font-medium">View</span>
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      {loading ? (
+        <div className="flex justify-center py-12 gap-2 text-muted-foreground">
+          <Loader className="h-5 w-5 animate-spin" />
+          Loading claims…
         </div>
-
-        {filteredClaims.length === 0 && (
-          <div className="px-6 py-12 text-center">
-            <p className="text-muted-foreground">No claims found matching your filters</p>
+      ) : (
+        <div className="glass rounded-lg border border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-border bg-secondary/10">
+                <tr>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">CLAIM ID</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">PATIENT</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">AMOUNT</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">STATUS</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground">SUBMITTED</th>
+                  <th className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredClaims.map((claim) => {
+                  const status = mapStatus(claim)
+                  const statusColor = getStatusColor(status)
+                  return (
+                    <tr key={claim.claimId} className="hover:bg-secondary/10 transition-colors duration-200">
+                      <td className="px-6 py-4 text-sm font-semibold">{claim.claimId}</td>
+                      <td className="px-6 py-4 text-sm">{claim.memberName}</td>
+                      <td className="px-6 py-4 text-sm font-medium">{formatCurrency(claim.claimAmount)}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className="inline-block px-3 py-1 rounded-full border text-xs font-medium capitalize"
+                          style={{
+                            backgroundColor: statusColor.bg,
+                            borderColor: statusColor.border,
+                            color: statusColor.text,
+                          }}
+                        >
+                          {status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
+                        {formatRelativeDate(claim.submittedAt)}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => router.push(`/dashboard/claims/${claim.claimId}`)}
+                          className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+                        >
+                          <span className="text-sm font-medium">View</span>
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+          {filteredClaims.length === 0 && (
+            <div className="px-6 py-12 text-center">
+              <p className="text-muted-foreground">No claims found</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

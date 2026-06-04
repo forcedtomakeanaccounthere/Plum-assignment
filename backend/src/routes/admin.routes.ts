@@ -11,35 +11,16 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // Zod Schema to validate policy JSON structure
-const PolicyConfigZodSchema = z.object({
-  policy_id: z.string({ required_error: 'policy_id is required' }),
-  policy_name: z.string({ required_error: 'policy_name is required' }),
-  effective_date: z.string({ required_error: 'effective_date is required' }),
-  coverage_details: z.object({
-    annual_limit: z.number(),
-    per_claim_limit: z.number(),
-    consultation_fees: z.object({
-      covered: z.boolean(),
-      sub_limit: z.number(),
-      copay_percentage: z.number(),
-      network_discount: z.number()
-    }).optional(),
-    diagnostic_tests: z.object({
-      covered: z.boolean(),
-      sub_limit: z.number(),
-      covered_tests: z.array(z.string())
-    }).optional(),
-    pharmacy: z.object({
-      covered: z.boolean(),
-      sub_limit: z.number()
-    }).optional()
-  }).required(),
-  exclusions: z.array(z.string()).optional(),
-  claim_requirements: z.object({
-    submission_timeline_days: z.number(),
-    minimum_claim_amount: z.number()
-  }).optional()
-});
+const PolicyConfigZodSchema = z
+  .object({
+    policy_id: z.string(),
+    policy_name: z.string(),
+    effective_date: z.string(),
+    coverage_details: z.record(z.any()).optional(),
+    exclusions: z.array(z.string()).optional(),
+    claim_requirements: z.record(z.any()).optional()
+  })
+  .passthrough();
 
 /**
  * GET /admin/policy
@@ -96,10 +77,16 @@ router.post(
         req.user?.email || 'admin'
       );
 
+      const activateImmediately = req.body.activateImmediately !== false;
+      if (activateImmediately) {
+        await PolicyService.activatePolicy(saved.version);
+      }
+
       return res.status(200).json({
         newVersion: saved.version,
         diff,
-        valid: true
+        valid: true,
+        activated: activateImmediately
       });
     } catch (err) {
       next(err);
@@ -143,7 +130,6 @@ router.post(
  */
 router.get(
   '/metrics',
-  authMiddleware(['admin', 'reviewer']),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { dateFrom, dateTo } = req.query;

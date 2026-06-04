@@ -24,7 +24,8 @@ Plum-assignment/
 ├── frontend/                     # Next.js 14 Frontend App
 │   ├── app/                      # Next.js App Router Page Layouts
 │   ├── components/               # Resilient UI Bento components & overlays
-│   ├── lib/                      # Core APIs and DOMPurify wrappers
+│   ├── lib/                      # API client & Cloudinary upload helpers
+│   ├── .env.local.example        # Frontend env template (API + Cloudinary)
 │   └── package.json              # Next.js packages
 │
 ├── project guide/                # Original assignment brief, policies & test cases
@@ -77,6 +78,21 @@ The server will boot on port `3001` and automatically seed initial database data
   - Admin: `admin@plum.com`
   - Reviewer: `reviewer@plum.com`
   - Viewer: `viewer@plum.com`
+
+---
+
+## 🖥️ Frontend Setup
+
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local   # set API URL and Cloudinary upload preset
+npm run dev
+```
+
+- **Public routes**: `/`, `/dashboard`, `/dashboard/claims`, `/dashboard/claims/new`, claim detail — no login required.
+- **Admin only**: `/dashboard/settings` — login with `admin@plum.com` / `Password123` to edit policy JSON.
+- **Cloudinary**: Create an unsigned upload preset in Cloudinary dashboard and set `NEXT_PUBLIC_CLOUDINARY_*` in `.env.local`. If unset, files upload directly to the backend (server-side Cloudinary when configured).
 
 ---
 

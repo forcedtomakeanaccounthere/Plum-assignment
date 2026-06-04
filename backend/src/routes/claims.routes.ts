@@ -2,7 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
-import { z } from 'zod';
+import https from 'https';
+import http from 'http';
 import { Claim, IClaim } from '../models/Claim.model';
 import { AuditLog } from '../models/AuditLog.model';
 import { OcrService } from '../services/ocr.service';
@@ -81,19 +82,94 @@ function generateClaimId(): string {
   return `CLM_${dateStr}_${rand}`;
 }
 
+interface CloudinaryDocInput {
+  url: string;
+  type: string;
+  originalname?: string;
+}
+
+async function downloadToTempFile(url: string, originalname: string): Promise<string> {
+  const ext = path.extname(originalname) || path.extname(new URL(url).pathname) || '.jpg';
+  const destPath = path.join(uploadDir, `cloud-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  const client = url.startsWith('https') ? https : http;
+
+  await new Promise<void>((resolve, reject) => {
+    client
+      .get(url, (response) => {
+        if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          downloadToTempFile(response.headers.location, originalname).then(resolve).catch(reject);
+          return;
+        }
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download file: HTTP ${response.statusCode}`));
+          return;
+        }
+        const fileStream = fs.createWriteStream(destPath);
+        response.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close();
+          resolve();
+        });
+        fileStream.on('error', reject);
+      })
+      .on('error', reject);
+  });
+
+  return destPath;
+}
+
 /**
  * POST /claims
  * Initiates claim processing
  */
 router.post(
   '/',
-  authMiddleware(),
   claimSubmissionRateLimiter,
-  upload.array('files[]', 5),
+  upload.array('files[]', 10),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const files = req.files as Express.Multer.File[];
-      const { memberId, memberName, treatmentDate, claimAmount, hospitalName, cashlessRequest, documentTypes } = req.body;
+      let files = (req.files as Express.Multer.File[]) || [];
+      const { memberId, memberName, treatmentDate, claimAmount, hospitalName, cashlessRequest, documentTypes, cloudinaryDocuments } = req.body;
+
+      if ((!files || files.length === 0) && cloudinaryDocuments) {
+        let parsedDocs: CloudinaryDocInput[] = [];
+        try {
+          parsedDocs = typeof cloudinaryDocuments === 'string'
+            ? JSON.parse(cloudinaryDocuments)
+            : cloudinaryDocuments;
+        } catch {
+          return res.status(400).json({ error: 'Invalid cloudinaryDocuments JSON.' });
+        }
+
+        if (!Array.isArray(parsedDocs) || parsedDocs.length === 0) {
+          return res.status(400).json({ error: 'At least one Cloudinary document is required.' });
+        }
+
+        const downloaded: Express.Multer.File[] = [];
+        for (let i = 0; i < parsedDocs.length; i++) {
+          const doc = parsedDocs[i];
+          if (!doc.url) {
+            return res.status(400).json({ error: 'Each document must include a url.' });
+          }
+          const tempPath = await downloadToTempFile(doc.url, doc.originalname || `doc-${i}.jpg`);
+          downloaded.push({
+            fieldname: 'files[]',
+            originalname: doc.originalname || `document-${i + 1}.jpg`,
+            encoding: '7bit',
+            mimetype: 'image/jpeg',
+            size: fs.statSync(tempPath).size,
+            destination: uploadDir,
+            filename: path.basename(tempPath),
+            path: tempPath,
+            stream: undefined as any,
+            buffer: undefined as any
+          } as Express.Multer.File);
+        }
+        files = downloaded;
+
+        (req as any)._cloudinaryUrls = parsedDocs.map((d) => d.url);
+        (req as any)._cloudinaryTypes = parsedDocs.map((d) => d.type);
+      }
 
       if (!files || files.length === 0) {
         return res.status(400).json({ error: 'At least one file must be uploaded.' });
@@ -110,13 +186,19 @@ router.post(
 
       // Map document types array
       let types: string[] = [];
-      if (typeof documentTypes === 'string') {
-        types = [documentTypes];
+      const presetTypes = (req as any)._cloudinaryTypes as string[] | undefined;
+      if (presetTypes && presetTypes.length) {
+        types = presetTypes;
+      } else if (typeof documentTypes === 'string') {
+        try {
+          types = JSON.parse(documentTypes);
+        } catch {
+          types = [documentTypes];
+        }
       } else if (Array.isArray(documentTypes)) {
         types = documentTypes;
       } else {
-        // Fallback guess based on index
-        types = files.map((_, i) => i === 0 ? 'prescription' : 'bill');
+        types = files.map((_, i) => (i === 0 ? 'prescription' : i === 1 ? 'bill' : 'supporting'));
       }
 
       const claimId = generateClaimId();
@@ -134,7 +216,7 @@ router.post(
         status: 'processing',
         documents: files.map((f, index) => ({
           type: types[index] || 'bill',
-          cloudinaryUrl: '', // Will populate during uploading step
+          cloudinaryUrl: ((req as any)._cloudinaryUrls?.[index] as string) || '',
           ocrText: '',
           processingStatus: 'pending'
         })),
@@ -160,7 +242,7 @@ router.post(
       await AuditLog.create({
         claimId,
         event: 'Submitted',
-        actor: req.user?.email || 'system',
+        actor: req.user?.email || 'member',
         metadata: { claimAmount: parsedClaimAmount, documentsCount: files.length }
       });
 
@@ -205,7 +287,7 @@ router.get('/:id/stream', (req: Request, res: Response) => {
  * GET /claims
  * Table claims view with filters and cursor pagination
  */
-router.get('/', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, decision, dateFrom, dateTo, memberId, limit = '25', cursor } = req.query;
 
@@ -227,7 +309,7 @@ router.get('/', authMiddleware(), async (req: Request, res: Response, next: Next
 
     const pageSize = parseInt(limit as string, 10);
     const claims = await Claim.find(query)
-      .sort({ _id: 1 })
+      .sort({ submittedAt: -1 })
       .limit(pageSize);
 
     const total = await Claim.countDocuments(query);
@@ -265,7 +347,7 @@ router.get('/', authMiddleware(), async (req: Request, res: Response, next: Next
  * GET /claims/:id
  * Full Claim details
  */
-router.get('/:id', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const claim = await Claim.findOne({ claimId: req.params.id });
     if (!claim) {
@@ -358,7 +440,9 @@ async function processClaimPipeline(
       const file = files[i];
       let secureUrl = '';
       
-      if (cloudinary) {
+      if (claim.documents[i].cloudinaryUrl) {
+        secureUrl = claim.documents[i].cloudinaryUrl;
+      } else if (cloudinary && fs.existsSync(file.path)) {
         try {
           const result = await cloudinary.uploader.upload(file.path, {
             folder: 'plum_opd_claims',
@@ -369,9 +453,8 @@ async function processClaimPipeline(
           logger.error(`Cloudinary upload failed for ${file.originalname}, using local fallback.`, err);
         }
       }
-      
-      // Fallback: local public asset URL
-      if (!secureUrl) {
+
+      if (!secureUrl && fs.existsSync(file.path)) {
         secureUrl = `/uploads/${path.basename(file.path)}`;
       }
 

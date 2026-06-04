@@ -12,7 +12,6 @@ const router = Router({ mergeParams: true });
  */
 router.post(
   '/',
-  authMiddleware(),
   chatRateLimiter,
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {

@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import { globalRateLimiter } from './middleware/rateLimiter.middleware';
 import { errorHandler } from './middleware/errorHandler.middleware';
 import { seedUsersIfNone } from './routes/auth.routes';
+import { PolicyService } from './services/policy.service';
 
 // Import Route Handlers
 import authRoutes from './routes/auth.routes';
@@ -61,8 +62,9 @@ app.use(errorHandler);
 async function startServer() {
   await connectDB();
   
-  // Seed default admin/reviewer accounts
+  // Seed default admin/reviewer accounts and active policy
   await seedUsersIfNone();
+  await PolicyService.getActivePolicy();
 
   const port = env.PORT;
   app.listen(port, () => {
