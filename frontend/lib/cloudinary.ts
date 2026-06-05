@@ -4,6 +4,11 @@ export type UploadedFile = {
   publicId?: string
 }
 
+export function detectMediaFormat(file: File): 'image' | 'pdf' {
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) return 'pdf'
+  return 'image'
+}
+
 export async function uploadToCloudinary(file: File): Promise<UploadedFile> {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
   const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET

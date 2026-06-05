@@ -94,6 +94,18 @@ npm run dev
 - **Admin only**: `/dashboard/settings` — login with `admin@plum.com` / `Password123` to edit policy JSON.
 - **Cloudinary**: Create an unsigned upload preset in Cloudinary dashboard and set `NEXT_PUBLIC_CLOUDINARY_*` in `.env.local`. If unset, files upload directly to the backend (server-side Cloudinary when configured).
 
+### PDF OCR (Poppler + Python)
+
+For PDF uploads (max **3 pages** per file):
+
+```bash
+pip install -r backend/scripts/requirements-ocr.txt
+```
+
+- Install [Poppler](https://github.com/oschwartz10612/poppler-windows/releases) and set `POPPLER_PATH` in `backend/.env` (Windows).
+- Install [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) and ensure `tesseract` is on PATH (used by `pytesseract`).
+- Images continue to use **Tesseract.js** in Node; PDFs use **pdf2image + pytesseract** via `backend/scripts/pdf_ocr.py`.
+
 ---
 
 ## 🔍 Adjudication Pipeline Details

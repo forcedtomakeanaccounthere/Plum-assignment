@@ -3,9 +3,32 @@ import { Schema, model, Document } from 'mongoose';
 export interface IDocumentDetail {
   type: 'prescription' | 'bill' | 'lab_report' | 'pharmacy_bill' | 'supporting';
   cloudinaryUrl: string;
+  originalFileName?: string;
+  mediaFormat?: 'image' | 'pdf';
+  mimeType?: string;
   ocrText: string;
   extractedFields: Record<string, any>;
   processingStatus: 'pending' | 'ocr_done' | 'extracted' | 'failed';
+}
+
+export interface IAdjudicationExplainability {
+  decision: string;
+  confidenceScore: number;
+  aiConfidence: number;
+  aiReasoning: string;
+  ruleCategories: Array<{
+    category: string;
+    label: string;
+    reasons: Array<{ code: string; message: string; passed: boolean }>;
+  }>;
+  topReasons: string[];
+  fraudTriggered: boolean;
+  fraudFlags: string[];
+  needsHumanIntervention: boolean;
+  urgentReview: boolean;
+  humanInterventionReasons: string[];
+  partialCoverageNote?: string;
+  aiAccuracyNote: string;
 }
 
 export interface ICostItem {
@@ -33,6 +56,7 @@ export interface IClaim extends Document {
   };
   ruleEngineResult?: Record<string, any>;
   aiDecisionResult?: Record<string, any>;
+  adjudicationExplainability?: IAdjudicationExplainability;
   finalDecision: {
     decision: 'APPROVED' | 'REJECTED' | 'PARTIAL' | 'MANUAL_REVIEW';
     approvedAmount: number;
@@ -84,6 +108,9 @@ const ClaimSchema = new Schema<IClaim>(
       {
         type: { type: String, enum: ['prescription', 'bill', 'lab_report', 'pharmacy_bill', 'supporting'], required: true },
         cloudinaryUrl: { type: String, required: true },
+        originalFileName: { type: String },
+        mediaFormat: { type: String, enum: ['image', 'pdf'] },
+        mimeType: { type: String },
         ocrText: { type: String, default: '' },
         extractedFields: { type: Schema.Types.Mixed, default: {} },
         processingStatus: { type: String, enum: ['pending', 'ocr_done', 'extracted', 'failed'], default: 'pending' }
@@ -104,6 +131,7 @@ const ClaimSchema = new Schema<IClaim>(
     },
     ruleEngineResult: { type: Schema.Types.Mixed, default: {} },
     aiDecisionResult: { type: Schema.Types.Mixed, default: {} },
+    adjudicationExplainability: { type: Schema.Types.Mixed, default: null },
     finalDecision: {
       decision: { type: String, enum: ['APPROVED', 'REJECTED', 'PARTIAL', 'MANUAL_REVIEW'], required: true },
       approvedAmount: { type: Number, required: true },

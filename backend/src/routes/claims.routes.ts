@@ -86,14 +86,25 @@ interface CloudinaryDocInput {
   url: string;
   type: string;
   originalname?: string;
+  mimeType?: string;
+  mediaFormat?: 'image' | 'pdf';
 }
 
 async function downloadToTempFile(url: string, originalname: string): Promise<string> {
-  const ext = path.extname(originalname) || path.extname(new URL(url).pathname) || '.jpg';
+  let ext = path.extname(originalname)
+  if (!ext) {
+    try {
+      ext = path.extname(new URL(url).pathname)
+    } catch {
+      ext = ''
+    }
+  }
+  if (!ext && url.toLowerCase().includes('.pdf')) ext = '.pdf'
+  if (!ext) ext = '.jpg'
   const destPath = path.join(uploadDir, `cloud-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
   const client = url.startsWith('https') ? https : http;
 
-  await new Promise<void>((resolve, reject) => {
+  const resolvedPath = await new Promise<string>((resolve, reject) => {
     client
       .get(url, (response) => {
         if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
@@ -108,14 +119,14 @@ async function downloadToTempFile(url: string, originalname: string): Promise<st
         response.pipe(fileStream);
         fileStream.on('finish', () => {
           fileStream.close();
-          resolve();
+          resolve(destPath);
         });
         fileStream.on('error', reject);
       })
       .on('error', reject);
   });
 
-  return destPath;
+  return resolvedPath;
 }
 
 /**
@@ -151,12 +162,14 @@ router.post(
           if (!doc.url) {
             return res.status(400).json({ error: 'Each document must include a url.' });
           }
-          const tempPath = await downloadToTempFile(doc.url, doc.originalname || `doc-${i}.jpg`);
+          const originalname = doc.originalname || `document-${i + 1}.jpg`;
+          const tempPath = await downloadToTempFile(doc.url, originalname);
+          const isPdf = doc.mediaFormat === 'pdf' || OcrService.isPdf(originalname, doc.mimeType);
           downloaded.push({
             fieldname: 'files[]',
-            originalname: doc.originalname || `document-${i + 1}.jpg`,
+            originalname,
             encoding: '7bit',
-            mimetype: 'image/jpeg',
+            mimetype: doc.mimeType || (isPdf ? 'application/pdf' : 'image/jpeg'),
             size: fs.statSync(tempPath).size,
             destination: uploadDir,
             filename: path.basename(tempPath),
@@ -217,6 +230,9 @@ router.post(
         documents: files.map((f, index) => ({
           type: types[index] || 'bill',
           cloudinaryUrl: ((req as any)._cloudinaryUrls?.[index] as string) || '',
+          originalFileName: f.originalname,
+          mimeType: f.mimetype,
+          mediaFormat: OcrService.isPdf(f.originalname, f.mimetype) ? 'pdf' : 'image',
           ocrText: '',
           processingStatus: 'pending'
         })),
@@ -475,7 +491,13 @@ async function processClaimPipeline(
       const file = files[i];
       try {
         const fileBuffer = fs.readFileSync(file.path);
-        const text = await OcrService.extractText(fileBuffer, file.originalname);
+        const text = await OcrService.extractText(fileBuffer, file.originalname, {
+          filePath: file.path,
+          mimeType: file.mimetype,
+        });
+        claim.documents[i].originalFileName = file.originalname;
+        claim.documents[i].mimeType = file.mimetype;
+        claim.documents[i].mediaFormat = OcrService.isPdf(file.originalname, file.mimetype) ? 'pdf' : 'image';
         claim.documents[i].ocrText = text;
         claim.documents[i].processingStatus = 'ocr_done';
         combinedOcrText += `--- Document ${claim.documents[i].type.toUpperCase()} ---\n${text}\n\n`;
@@ -568,7 +590,12 @@ async function processClaimPipeline(
 
     // 3. Fusion Logic
     const fused = AdjudicationService.fuseDecisions(ruleResult, aiResult);
-    
+    claim.adjudicationExplainability = AdjudicationService.buildExplainabilityPayload(
+      ruleResult,
+      aiResult,
+      fused
+    );
+
     claim.finalDecision = {
       decision: fused.decision,
       approvedAmount: fused.approvedAmount,
@@ -579,7 +606,15 @@ async function processClaimPipeline(
       decidedAt: new Date()
     };
 
-    claim.status = fused.decision === 'MANUAL_REVIEW' ? 'under_review' : 'decided';
+    if (
+      fused.decision === 'MANUAL_REVIEW' ||
+      claim.adjudicationExplainability?.needsHumanIntervention ||
+      claim.adjudicationExplainability?.urgentReview
+    ) {
+      claim.status = 'under_review';
+    } else {
+      claim.status = 'decided';
+    }
     
     // 4. Index text chunks into Vector store for RAG chat
     try {
@@ -604,6 +639,7 @@ async function processClaimPipeline(
     // Emit final event with decision details to client
     sendSSEEvent(claimId, 'final', {
       decision: claim.finalDecision,
+      explainability: claim.adjudicationExplainability,
       claimId
     });
 

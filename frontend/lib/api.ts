@@ -10,7 +10,32 @@ export type AuthUser = {
 export type ClaimDocument = {
   type: string
   cloudinaryUrl: string
+  originalFileName?: string
+  mediaFormat?: 'image' | 'pdf'
+  mimeType?: string
+  ocrText?: string
+  extractedFields?: Record<string, unknown>
   processingStatus: string
+}
+
+export type AdjudicationExplainability = {
+  decision: string
+  confidenceScore: number
+  aiConfidence: number
+  aiReasoning: string
+  ruleCategories: Array<{
+    category: string
+    label: string
+    reasons: Array<{ code: string; message: string; passed: boolean }>
+  }>
+  topReasons: string[]
+  fraudTriggered: boolean
+  fraudFlags: string[]
+  needsHumanIntervention: boolean
+  urgentReview: boolean
+  humanInterventionReasons: string[]
+  partialCoverageNote?: string
+  aiAccuracyNote: string
 }
 
 export type Claim = {
@@ -27,12 +52,16 @@ export type Claim = {
   extractedSummary?: {
     diagnosis?: string
     doctorName?: string
+    doctorReg?: string
     totalBilledAmount?: number
+    itemizedCosts?: Array<{ item: string; amount: number; category: string }>
   }
+  adjudicationExplainability?: AdjudicationExplainability
   finalDecision: {
     decision: string
     approvedAmount: number
     rejectionReasons: string[]
+    deductions?: Array<{ reason: string; amount: number }>
     confidenceScore: number
     notes?: string
   }
@@ -132,7 +161,13 @@ export async function submitClaim(payload: {
   claimAmount: number
   hospitalName?: string
   cashlessRequest?: boolean
-  cloudinaryDocuments?: Array<{ url: string; type: string; originalname: string }>
+  cloudinaryDocuments?: Array<{
+    url: string
+    type: string
+    originalname: string
+    mimeType?: string
+    mediaFormat?: 'image' | 'pdf'
+  }>
   files?: Array<{ file: File; type: string }>
 }) {
   const form = new FormData()

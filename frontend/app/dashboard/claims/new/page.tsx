@@ -3,11 +3,12 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Upload, Loader, FileText, Pill, Paperclip } from 'lucide-react'
+import { Upload, Loader, FileText, Pill, Paperclip, ImageIcon, FileType } from 'lucide-react'
 import { submitClaim } from '@/lib/api'
-import { uploadToCloudinary, isCloudinaryConfigured } from '@/lib/cloudinary'
+import { uploadToCloudinary, isCloudinaryConfigured, detectMediaFormat } from '@/lib/cloudinary'
 
 type DocSlot = 'bill' | 'prescription' | 'supporting'
+type UploadFormat = 'image' | 'pdf'
 
 function FileSlot({
   label,
@@ -15,12 +16,14 @@ function FileSlot({
   file,
   onSelect,
   icon: Icon,
+  accept,
 }: {
   label: string
   required?: boolean
   file: File | null
   onSelect: (f: File | null) => void
   icon: React.ComponentType<{ className?: string }>
+  accept: string
 }) {
   return (
     <div className="rounded-lg border border-dashed border-border p-4 space-y-2">
@@ -33,17 +36,22 @@ function FileSlot({
       </div>
       <input
         type="file"
-        accept="image/*,.pdf"
+        accept={accept}
         className="text-xs w-full"
         onChange={(e) => onSelect(e.target.files?.[0] || null)}
       />
-      {file && <p className="text-xs text-muted-foreground truncate">{file.name}</p>}
+      {file && (
+        <p className="text-xs text-muted-foreground truncate">
+          {file.name} ({detectMediaFormat(file)})
+        </p>
+      )}
     </div>
   )
 }
 
 export default function NewClaimPage() {
   const router = useRouter()
+  const [uploadFormat, setUploadFormat] = useState<UploadFormat>('image')
   const [memberId, setMemberId] = useState('')
   const [memberName, setMemberName] = useState('')
   const [treatmentDate, setTreatmentDate] = useState('')
@@ -56,8 +64,35 @@ export default function NewClaimPage() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState('')
 
-  const handleSupportingAdd = (file: File | null) => {
-    if (file) setSupportingFiles((prev) => [...prev, file].slice(0, 5))
+  const accept =
+    uploadFormat === 'pdf'
+      ? 'application/pdf'
+      : 'image/jpeg,image/png,image/webp'
+
+  const validateFile = (file: File, label: string) => {
+    const fmt = detectMediaFormat(file)
+    if (fmt !== uploadFormat) {
+      throw new Error(`${label} must be ${uploadFormat === 'pdf' ? 'a PDF' : 'an image (JPG, PNG, WEBP)'}.`)
+    }
+    if (uploadFormat === 'pdf' && file.size > 10 * 1024 * 1024) {
+      throw new Error(`${label} PDF must be under 10MB (max 3 pages processed).`)
+    }
+  }
+
+  const handleSupportingAdd = (list: FileList | null) => {
+    if (!list?.length) return
+    const next: File[] = []
+    for (let i = 0; i < list.length; i++) {
+      try {
+        validateFile(list[i], 'Supporting document')
+        next.push(list[i])
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Invalid file')
+        return
+      }
+    }
+    setSupportingFiles((prev) => [...prev, ...next].slice(0, 8))
+    setError(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,6 +101,15 @@ export default function NewClaimPage() {
 
     if (!billFile || !prescriptionFile) {
       setError('Bill and prescription documents are required.')
+      return
+    }
+
+    try {
+      validateFile(billFile, 'Bill')
+      validateFile(prescriptionFile, 'Prescription')
+      supportingFiles.forEach((f, i) => validateFile(f, `Supporting document ${i + 1}`))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid files')
       return
     }
 
@@ -86,7 +130,13 @@ export default function NewClaimPage() {
       let result: { claimId: string; streamUrl: string }
 
       if (isCloudinaryConfigured()) {
-        const cloudinaryDocuments: Array<{ url: string; type: string; originalname: string }> = []
+        const cloudinaryDocuments: Array<{
+          url: string
+          type: string
+          originalname: string
+          mimeType: string
+          mediaFormat: UploadFormat
+        }> = []
         for (let i = 0; i < uploads.length; i++) {
           setProgress(`Uploading to Cloudinary: ${uploads[i].type} (${i + 1}/${uploads.length})…`)
           const uploaded = await uploadToCloudinary(uploads[i].file)
@@ -94,6 +144,8 @@ export default function NewClaimPage() {
             url: uploaded.url,
             type: uploads[i].type,
             originalname: uploaded.originalname,
+            mimeType: uploads[i].file.type,
+            mediaFormat: detectMediaFormat(uploads[i].file),
           })
         }
         setProgress('Submitting claim for processing…')
@@ -106,7 +158,7 @@ export default function NewClaimPage() {
           cloudinaryDocuments,
         })
       } else {
-        setProgress('Uploading files to server (Cloudinary env not set — server-side upload)…')
+        setProgress('Uploading files to server…')
         result = await submitClaim({
           memberId,
           memberName,
@@ -131,7 +183,7 @@ export default function NewClaimPage() {
       <div>
         <h1 className="text-3xl font-bold">New Claim</h1>
         <p className="text-muted-foreground mt-1">
-          Upload bill and prescription via Cloudinary, plus optional supporting documents.
+          Images use Tesseract directly; PDFs (max 3 pages) use Poppler + pdf2image + Tesseract.
         </p>
       </div>
 
@@ -152,7 +204,7 @@ export default function NewClaimPage() {
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
                 className="w-full rounded-lg border border-input bg-input px-3 py-2 text-sm"
-                placeholder="MEM-001"
+                placeholder="EMP001"
               />
             </div>
             <div>
@@ -197,35 +249,82 @@ export default function NewClaimPage() {
         </div>
 
         <div className="glass rounded-lg border border-border p-6 space-y-4">
-          <h2 className="font-semibold flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Documents (Cloudinary)
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Documents
+            </h2>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">Upload format:</label>
+              <select
+                value={uploadFormat}
+                onChange={(e) => {
+                  setUploadFormat(e.target.value as UploadFormat)
+                  setBillFile(null)
+                  setPrescriptionFile(null)
+                  setSupportingFiles([])
+                }}
+                className="rounded-lg border border-input bg-input px-3 py-1.5 text-sm"
+              >
+                <option value="image">Images (JPG, PNG, WEBP)</option>
+                <option value="pdf">PDF (max 3 pages)</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground flex items-center gap-2">
+            {uploadFormat === 'image' ? (
+              <>
+                <ImageIcon className="h-3.5 w-3.5" />
+                Tesseract OCR runs directly on images.
+              </>
+            ) : (
+              <>
+                <FileType className="h-3.5 w-3.5" />
+                PDFs are converted to images via Poppler (pdf2image), then OCR with pytesseract.
+              </>
+            )}
+          </p>
+
           <div className="grid sm:grid-cols-2 gap-4">
-            <FileSlot label="Bill" required file={billFile} onSelect={setBillFile} icon={FileText} />
+            <FileSlot
+              label="Bill"
+              required
+              file={billFile}
+              onSelect={setBillFile}
+              icon={FileText}
+              accept={accept}
+            />
             <FileSlot
               label="Prescription"
               required
               file={prescriptionFile}
               onSelect={setPrescriptionFile}
               icon={Pill}
+              accept={accept}
             />
           </div>
-          <div>
-            <FileSlot
-              label="Supporting document (optional)"
-              file={null}
-              onSelect={handleSupportingAdd}
-              icon={Paperclip}
+
+          <div className="rounded-lg border border-dashed border-border p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Supporting documents (optional, multiple)</span>
+            </div>
+            <input
+              type="file"
+              accept={accept}
+              multiple
+              className="text-xs w-full"
+              onChange={(e) => handleSupportingAdd(e.target.files)}
             />
             {supportingFiles.length > 0 && (
               <ul className="mt-2 text-xs text-muted-foreground space-y-1">
                 {supportingFiles.map((f, i) => (
-                  <li key={i} className="flex justify-between">
-                    <span>{f.name}</span>
+                  <li key={i} className="flex justify-between gap-2">
+                    <span className="truncate">{f.name}</span>
                     <button
                       type="button"
-                      className="text-destructive"
+                      className="text-destructive shrink-0"
                       onClick={() => setSupportingFiles((prev) => prev.filter((_, j) => j !== i))}
                     >
                       Remove
