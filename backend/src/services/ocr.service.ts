@@ -1,7 +1,10 @@
 import path from 'path';
+import fs from 'fs';
+import { spawn } from 'child_process';
 import workerpool from 'workerpool';
 import { logger } from '../utils/logger';
 import { performOcr } from './ocr.worker';
+import { env } from '../config/env';
 
 let pool: workerpool.Pool | null = null;
 
@@ -24,18 +27,46 @@ export class OcrService {
    * Performs OCR on an image buffer, routing to the worker pool.
    * Falls back to main thread execution if pool is unavailable.
    */
-  static async extractText(imageBuffer: Buffer, fileName: string): Promise<string> {
+  static isPdf(fileName: string, mimeType?: string): boolean {
+    const lower = fileName.toLowerCase();
+    return mimeType === 'application/pdf' || lower.endsWith('.pdf');
+  }
+
+  static isImage(fileName: string, mimeType?: string): boolean {
+    if (mimeType?.startsWith('image/')) return true;
+    return /\.(jpe?g|png|webp)$/i.test(fileName);
+  }
+
+  /**
+   * Extract text from image (Tesseract.js) or PDF (pdf2image + pytesseract via Python, max 3 pages).
+   */
+  static async extractText(
+    fileBuffer: Buffer,
+    fileName: string,
+    options?: { filePath?: string; mimeType?: string }
+  ): Promise<string> {
     logger.info(`Starting OCR text extraction for file: ${fileName}`);
-    
-    // Quick mock bypass if we are doing offline test cases with no real OCR file
+
     if (fileName.startsWith('mock_')) {
       logger.info('Mock filename detected. Returning mock OCR text.');
       return this.getMockOcrText(fileName);
     }
 
+    if (this.isPdf(fileName, options?.mimeType)) {
+      const pdfPath = options?.filePath;
+      if (!pdfPath || !fs.existsSync(pdfPath)) {
+        throw new Error(`PDF OCR requires a file path. Missing file for ${fileName}`);
+      }
+      return this.extractTextFromPdf(pdfPath);
+    }
+
+    if (!this.isImage(fileName, options?.mimeType)) {
+      throw new Error(`Unsupported file type for OCR: ${fileName}`);
+    }
+
     if (pool) {
       try {
-        const text: string = await pool.exec('performOcr', [imageBuffer]);
+        const text: string = await pool.exec('performOcr', [fileBuffer]);
         logger.info(`OCR complete for ${fileName}. Extracted ${text.length} characters.`);
         return text;
       } catch (err) {
@@ -45,7 +76,7 @@ export class OcrService {
 
     // Main-thread fallback
     try {
-      const text = await performOcr(imageBuffer);
+      const text = await performOcr(fileBuffer);
       logger.info(`Main-thread OCR complete for ${fileName}. Extracted ${text.length} characters.`);
       return text;
     } catch (err) {
@@ -57,6 +88,46 @@ export class OcrService {
   /**
    * Shutdown pool on app termination
    */
+  /**
+   * PDF → images (Poppler) → Tesseract (Python). Limited to 3 pages.
+   */
+  private static async extractTextFromPdf(pdfPath: string): Promise<string> {
+    const scriptPath = path.resolve(__dirname, '../../scripts/pdf_ocr.py');
+    const pythonBin = env.PYTHON_PATH || 'python';
+
+    return new Promise((resolve, reject) => {
+      const child = spawn(pythonBin, [scriptPath, pdfPath], {
+        env: {
+          ...process.env,
+          POPPLER_PATH: env.POPPLER_PATH || process.env.POPPLER_PATH || '',
+        },
+      });
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => (stdout += d.toString()));
+      child.stderr.on('data', (d) => (stderr += d.toString()));
+
+      child.on('close', (code) => {
+        try {
+          const parsed = JSON.parse(stdout.trim() || '{}');
+          if (parsed.text) {
+            logger.info(`PDF OCR complete (${parsed.pages_processed} pages).`);
+            resolve(parsed.text);
+            return;
+          }
+          reject(new Error(parsed.error || stderr || `PDF OCR failed (exit ${code})`));
+        } catch {
+          reject(new Error(stderr || stdout || `PDF OCR failed (exit ${code})`));
+        }
+      });
+
+      child.on('error', (err) => {
+        reject(new Error(`Failed to spawn Python for PDF OCR: ${err.message}`));
+      });
+    });
+  }
+
   static async shutdown(): Promise<void> {
     if (pool) {
       await pool.terminate();

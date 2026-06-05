@@ -33,6 +33,8 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().optional().default(''),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PYTHON_PATH: z.string().optional().default('python'),
+  POPPLER_PATH: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);

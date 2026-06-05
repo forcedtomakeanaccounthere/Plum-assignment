@@ -23,8 +23,10 @@ async function performOcr(imageBuffer: Buffer): Promise<string> {
   }
 }
 
-// Register the worker tasks
-workerpool.worker({
-  performOcr
-});
+// Register the worker tasks only when running as a worker subprocess
+if (typeof process.send === 'function') {
+  workerpool.worker({
+    performOcr
+  });
+}
 export { performOcr };
