@@ -364,6 +364,10 @@ def main():
 
     # Convert PDF to Image for augmentations
     try:
+        # Debug info
+        sys.stderr.write(f"Converting PDF: {temp_pdf}\n")
+        sys.stderr.write(f"Poppler path: {poppler_path}\n")
+        
         if poppler_path and os.path.exists(poppler_path):
             images = convert_from_path(temp_pdf, dpi=200, poppler_path=poppler_path)
         else:
@@ -373,11 +377,11 @@ def main():
             raise Exception("No images generated from PDF")
             
     except Exception as e:
-        print(f"Error converting PDF to image: {e}")
-        # Final fallback: if poppler fails, we might be on a system where it's not installed
-        # but we need to report this clearly to the user
-        sys.stderr.write(f"CRITICAL: PDF to Image conversion failed. Is Poppler installed? Error: {str(e)}\n")
+        error_msg = f"CRITICAL: PDF to Image conversion failed. Is Poppler installed? Error: {str(e)}"
+        sys.stderr.write(error_msg + "\n")
         if os.path.exists(temp_pdf): os.remove(temp_pdf)
+        # Instead of exit, we can try to return a JSON error
+        print(json.dumps({"error": error_msg}))
         sys.exit(1)
 
     base_img_pil = images[0]

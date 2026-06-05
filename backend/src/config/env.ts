@@ -32,7 +32,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional().default(''),
   CLOUDINARY_API_SECRET: z.string().optional().default(''),
   MISTRAL_API_KEY: z.string().optional().default(''),
-  FRONTEND_URL: z.string().default('http://localhost:3000'),
+  FRONTEND_URL: z.string().default('https://plum-assignment-gules.vercel.app/'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PYTHON_PATH: z.string().optional().default('python'),
   POPPLER_PATH: z.string().optional().default(''),

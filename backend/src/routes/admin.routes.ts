@@ -197,8 +197,36 @@ router.get(
 );
 
 /**
- * POST /admin/generate-sample
- * Generates sample documents using Python script
+ * @swagger
+ * tags:
+ *   name: Admin
+ *   description: Administrative operations and data generation
+ */
+
+/**
+ * @swagger
+ * /api/admin/generate-sample:
+ *   post:
+ *     summary: Generate synthetic medical documents
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               docType:
+ *                 type: string
+ *               format:
+ *                 type: string
+ *               variations:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Documents generated successfully
  */
 router.post(
   '/generate-sample',

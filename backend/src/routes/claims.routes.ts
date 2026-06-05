@@ -130,8 +130,56 @@ async function downloadToTempFile(url: string, originalname: string): Promise<st
 }
 
 /**
- * POST /claims
- * Initiates claim processing
+ * @swagger
+ * tags:
+ *   name: Claims
+ *   description: Claim management and processing
+ */
+
+/**
+ * @swagger
+ * /api/claims:
+ *   post:
+ *     summary: Initiate a new claim processing
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               memberId:
+ *                 type: string
+ *               memberName:
+ *                 type: string
+ *               treatmentDate:
+ *                 type: string
+ *                 format: date
+ *               claimAmount:
+ *                 type: number
+ *               hospitalName:
+ *                 type: string
+ *               files[]:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *     responses:
+ *       202:
+ *         description: Claim accepted for processing
+ *   get:
+ *     summary: Get list of claims
+ *     tags: [Claims]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of claims
  */
 router.post(
   '/',

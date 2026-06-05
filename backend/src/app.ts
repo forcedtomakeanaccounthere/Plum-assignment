@@ -11,6 +11,7 @@ import { globalRateLimiter } from './middleware/rateLimiter.middleware';
 import { errorHandler } from './middleware/errorHandler.middleware';
 import { seedUsersIfNone } from './routes/auth.routes';
 import { PolicyService } from './services/policy.service';
+import { setupSwagger } from './config/swagger';
 
 // Import Route Handlers
 import authRoutes from './routes/auth.routes';
@@ -55,6 +56,7 @@ app.get('/health', (req, res) => {
 });
 
 // Register API Routes
+setupSwagger(app);
 app.use('/api/auth', authRoutes);
 app.use('/api/claims', claimsRoutes);
 app.use('/api/claims/:id/chat', chatRoutes);
