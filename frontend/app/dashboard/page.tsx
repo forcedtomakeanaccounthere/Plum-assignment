@@ -83,7 +83,7 @@ export default function DashboardPage() {
 
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}. Ensure the backend is running on port 3001.
+          {error}. {process.env.NODE_ENV === 'development' ? 'Ensure the backend is running on port 3001.' : 'Check backend status or logs.'}
         </div>
       )}
 
