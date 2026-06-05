@@ -53,13 +53,26 @@ export default function Page() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground">
-          Admin policy configuration:{' '}
-          <Link href="/dashboard/settings" className="text-primary hover:underline">
-            /dashboard/settings
-          </Link>{' '}
-          (login required)
-        </p>
+        <div className="text-center space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Admin policy configuration:{' '}
+            <Link href="/dashboard/settings" className="text-primary hover:underline">
+              /dashboard/settings
+            </Link>{' '}
+            (login required)
+          </p>
+          <p className="text-xl text-muted-foreground">
+            API documentation:{' '}
+            <a 
+              href="https://plum-assignment-lmbx.onrender.com/api-docs" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-primary hover:underline"
+            >
+              /api-docs (Swagger)
+            </a>
+          </p>
+        </div>
       </div>
     </main>
   )

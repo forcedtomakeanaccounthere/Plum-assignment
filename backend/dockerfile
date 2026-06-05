@@ -61,7 +61,9 @@ COPY --from=0 /app/dist /app/dist
 COPY --from=0 /app/package*.json ./
 COPY --from=0 /app/medical_doc_generator /app/medical_doc_generator
 COPY --from=0 /app/scripts /app/scripts
-COPY --from=0 /app/uploads /app/uploads
+
+# Create uploads directory in the final stage
+RUN mkdir -p /app/uploads
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN npm install --omit=dev
