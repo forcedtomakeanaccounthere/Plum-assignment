@@ -3,8 +3,11 @@
 This repository implements an automated outpatient department (OPD) claim adjudication tool that automatically processes medical files (bills, prescriptions), validates them against policy terms using a programmatic rule engine, utilizes Gemini LLM reasoning for soft rules, and exposes a secure vector search (RAG) chat panel.
 
 ---
+## Project deployment links
+Frontend - https://plum-assignment-gules.vercel.app/
+Backend - https://plum-assignment-lmbx.onrender.com
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Plum-assignment/
@@ -34,7 +37,7 @@ Plum-assignment/
 
 ---
 
-## ⚙️ Backend Setup & Verification
+## Backend Setup & Verification
 
 ### 1. Requirements
 Ensure you have the following installed:
@@ -81,7 +84,7 @@ The server will boot on port `3001` and automatically seed initial database data
 
 ---
 
-## 🖥️ Frontend Setup
+## Frontend Setup
 
 ```bash
 cd frontend
@@ -108,7 +111,7 @@ pip install -r backend/scripts/requirements-ocr.txt
 
 ---
 
-## 🔍 Adjudication Pipeline Details
+## Adjudication Pipeline Details
 
 The claims submission endpoint triggers a Server-Sent Events (SSE) stream returning real-time status:
 
@@ -126,7 +129,7 @@ graph TD
 
 ---
 
-## 🔒 Security Implementations
+## Security Implementations
 
 1. **Helmet headers**: Blocks inline scripting and configures CSP.
 2. **Rate Limits**:
