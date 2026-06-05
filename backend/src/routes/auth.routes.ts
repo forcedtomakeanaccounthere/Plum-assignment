@@ -15,17 +15,19 @@ const loginSchema = z.object({
 
 // Helper to sign tokens using RS256 private key
 function signAccessToken(user: any): string {
+  const key = env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n');
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
-    env.JWT_PRIVATE_KEY,
+    key,
     { algorithm: 'RS256', expiresIn: '1h' }
   );
 }
 
 function signRefreshToken(user: any): string {
+  const key = env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n');
   return jwt.sign(
     { id: user._id },
-    env.JWT_PRIVATE_KEY,
+    key,
     { algorithm: 'RS256', expiresIn: '7d' }
   );
 }
@@ -151,7 +153,8 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
     }
 
     try {
-      const decoded = jwt.verify(refreshToken, env.JWT_PUBLIC_KEY, {
+      const key = env.JWT_PUBLIC_KEY.replace(/\\n/g, '\n');
+      const decoded = jwt.verify(refreshToken, key, {
         algorithms: ['RS256']
       }) as { id: string };
 

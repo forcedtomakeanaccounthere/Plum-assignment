@@ -20,8 +20,9 @@ export function authMiddleware(roles?: Array<'admin' | 'reviewer' | 'viewer'>) {
 
     const token = authHeader.split(' ')[1];
     try {
+      const key = env.JWT_PUBLIC_KEY.replace(/\\n/g, '\n');
       // Validate using RS256 algorithm with public key
-      const decoded = jwt.verify(token, env.JWT_PUBLIC_KEY, {
+      const decoded = jwt.verify(token, key, {
         algorithms: ['RS256']
       }) as { id: string; email: string; role: 'admin' | 'reviewer' | 'viewer' };
 

@@ -259,11 +259,15 @@ router.post(
       const scriptPath = path.resolve(__dirname, '../../medical_doc_generator/generate_single.py');
       const pythonPath = env.PYTHON_PATH || 'python';
       
+      // Use process.cwd() or similar to ensure absolute paths
+      const absOutputDir = path.resolve(outputDir);
+      const absScriptPath = path.resolve(__dirname, '../../medical_doc_generator/generate_single.py');
+
       // Save data to temp file to avoid command line length limits
-      const tempJsonPath = path.join(outputDir, `data_${Date.now()}.json`);
+      const tempJsonPath = path.join(absOutputDir, `data_${Date.now()}.json`);
       fs.writeFileSync(tempJsonPath, JSON.stringify(pythonData));
       
-      const cmd = `"${pythonPath}" "${scriptPath}" "${tempJsonPath}"`;
+      const cmd = `"${pythonPath}" "${absScriptPath}" "${tempJsonPath}"`;
       
       exec(cmd, (error, stdout, stderr) => {
         // Cleanup temp file
