@@ -107,7 +107,7 @@ const ClaimSchema = new Schema<IClaim>(
     documents: [
       {
         type: { type: String, enum: ['prescription', 'bill', 'lab_report', 'pharmacy_bill', 'supporting'], required: true },
-        cloudinaryUrl: { type: String, required: true },
+        cloudinaryUrl: { type: String, required: false, default: '' },
         originalFileName: { type: String },
         mediaFormat: { type: String, enum: ['image', 'pdf'] },
         mimeType: { type: String },

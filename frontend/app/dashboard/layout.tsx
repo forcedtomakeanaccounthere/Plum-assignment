@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { LogOut, FileText, Home, Settings } from 'lucide-react'
+import { LogOut, FileText, Home, Settings, FilePlus } from 'lucide-react'
 
 export default function DashboardLayout({
   children,
@@ -38,6 +38,7 @@ export default function DashboardLayout({
   const menuItems = [
     { icon: Home, label: 'Dashboard', href: '/dashboard' },
     { icon: FileText, label: 'Claims', href: '/dashboard/claims' },
+    { icon: FilePlus, label: 'Generate Sample Doc', href: '/dashboard/generate_sample_doc' },
     { icon: Settings, label: 'Admin Settings', href: '/dashboard/settings' },
   ]
 

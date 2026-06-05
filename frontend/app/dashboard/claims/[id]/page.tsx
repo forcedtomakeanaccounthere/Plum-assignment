@@ -40,34 +40,92 @@ function buildExtractedRows(claim: Claim): Array<{ field: string; value: string;
   const rows: Array<{ field: string; value: string; source?: string }> = []
   const s = claim.extractedSummary
 
+  // 1. General Claim Details
+  rows.push({ field: 'Member ID', value: claim.memberId, source: 'Claim Application' })
+  rows.push({ field: 'Member name', value: claim.memberName, source: 'Claim Application' })
+  rows.push({ field: 'Claim amount', value: formatCurrency(claim.claimAmount), source: 'Claim Application' })
+  rows.push({ field: 'Treatment date', value: new Date(claim.treatmentDate).toLocaleDateString(), source: 'Claim Application' })
+  if (claim.hospitalName) rows.push({ field: 'Hospital', value: claim.hospitalName, source: 'Claim Application' })
+
+  // 2. Summary of Extraction
   if (s) {
-    if (s.diagnosis) rows.push({ field: 'Diagnosis', value: s.diagnosis })
-    if (s.doctorName) rows.push({ field: 'Doctor name', value: s.doctorName })
-    if (s.doctorReg) rows.push({ field: 'Doctor registration', value: s.doctorReg })
+    if (s.diagnosis) rows.push({ field: 'Diagnosis (Summary)', value: s.diagnosis, source: 'AI Summary' })
+    if (s.doctorName) rows.push({ field: 'Doctor name (Summary)', value: s.doctorName, source: 'AI Summary' })
+    if (s.doctorReg) rows.push({ field: 'Doctor registration (Summary)', value: s.doctorReg, source: 'AI Summary' })
     if (s.totalBilledAmount != null)
-      rows.push({ field: 'Total billed', value: formatCurrency(Number(s.totalBilledAmount)) })
+      rows.push({ field: 'Total billed (Summary)', value: formatCurrency(Number(s.totalBilledAmount)), source: 'AI Summary' })
     s.itemizedCosts?.forEach((c) => {
       rows.push({
         field: `Line item (${c.category})`,
         value: `${c.item} — ${formatCurrency(c.amount)}`,
+        source: 'AI Summary',
       })
     })
   }
 
+  // 3. Document-specific Extractions
   claim.documents?.forEach((doc) => {
     const ef = doc.extractedFields as Record<string, unknown> | undefined
     if (!ef) return
     const prefix = doc.type.charAt(0).toUpperCase() + doc.type.slice(1)
+    
     if (ef.patient_name) rows.push({ field: 'Patient name', value: fieldValue(ef.patient_name), source: prefix })
+    if (ef.doctor_name) rows.push({ field: 'Doctor name', value: fieldValue(ef.doctor_name), source: prefix })
+    if (ef.doctor_registration) rows.push({ field: 'Doctor registration', value: fieldValue(ef.doctor_registration), source: prefix })
     if (ef.date) rows.push({ field: 'Document date', value: fieldValue(ef.date), source: prefix })
+    if (ef.diagnosis) rows.push({ field: 'Diagnosis', value: fieldValue(ef.diagnosis), source: prefix })
     if (ef.total_amount) rows.push({ field: 'Document total', value: fieldValue(ef.total_amount), source: prefix })
-  })
+    if (ef.extraction_notes) rows.push({ field: 'Extraction notes', value: fieldValue(ef.extraction_notes), source: prefix })
 
-  rows.push({ field: 'Member ID', value: claim.memberId })
-  rows.push({ field: 'Member name', value: claim.memberName })
-  rows.push({ field: 'Claim amount', value: formatCurrency(claim.claimAmount) })
-  rows.push({ field: 'Treatment date', value: new Date(claim.treatmentDate).toLocaleDateString() })
-  if (claim.hospitalName) rows.push({ field: 'Hospital', value: claim.hospitalName })
+    // Medicines
+    if (Array.isArray(ef.medicines) && ef.medicines.length > 0) {
+      ef.medicines.forEach((med: any, idx: number) => {
+        const name = med.name || 'Unknown medicine'
+        const dosage = med.dosage ? ` (${med.dosage})` : ''
+        rows.push({
+          field: `Medicine #${idx + 1}`,
+          value: `${name}${dosage}`,
+          source: prefix,
+        })
+      })
+    }
+
+    // Procedures
+    if (Array.isArray(ef.procedures) && ef.procedures.length > 0) {
+      ef.procedures.forEach((proc: any, idx: number) => {
+        const name = proc.name || 'Unknown procedure'
+        const amount = proc.amount != null ? ` — ${formatCurrency(proc.amount)}` : ''
+        rows.push({
+          field: `Procedure #${idx + 1}`,
+          value: `${name}${amount}`,
+          source: prefix,
+        })
+      })
+    }
+
+    // Prescribed tests
+    if (Array.isArray(ef.tests_prescribed) && ef.tests_prescribed.length > 0) {
+      rows.push({
+        field: 'Tests prescribed',
+        value: ef.tests_prescribed.join(', '),
+        source: prefix,
+      })
+    }
+
+    // Itemized costs
+    if (Array.isArray(ef.itemized_costs) && ef.itemized_costs.length > 0) {
+      ef.itemized_costs.forEach((item: any, idx: number) => {
+        const name = item.item || item.name || 'Unspecified item'
+        const amount = item.amount != null ? formatCurrency(item.amount) : '—'
+        const category = item.category ? ` (${item.category})` : ''
+        rows.push({
+          field: `Itemized cost #${idx + 1}${category}`,
+          value: `${name} — ${amount}`,
+          source: prefix,
+        })
+      })
+    }
+  })
 
   return rows
 }
@@ -173,6 +231,50 @@ export default function ClaimDetailPage() {
   const decision = claim.finalDecision
   const exp = claim.adjudicationExplainability as AdjudicationExplainability | undefined
   const extractedRows = buildExtractedRows(claim)
+
+  const getDecisionTheme = (decisionStr?: string, isFraud?: boolean) => {
+    if (isFraud) {
+      return {
+        border: 'border-red-500/40',
+        bg: 'bg-red-500/5',
+        text: 'text-red-500',
+        badgeBg: 'bg-red-500/10',
+      }
+    }
+    switch (decisionStr) {
+      case 'APPROVED':
+        return {
+          border: 'border-emerald-500/40',
+          bg: 'bg-emerald-500/5',
+          text: 'text-emerald-500',
+          badgeBg: 'bg-emerald-500/10',
+        }
+      case 'REJECTED':
+        return {
+          border: 'border-red-500/40',
+          bg: 'bg-red-500/5',
+          text: 'text-red-500',
+          badgeBg: 'bg-red-500/10',
+        }
+      case 'PARTIAL':
+        return {
+          border: 'border-purple-500/40',
+          bg: 'bg-purple-500/5',
+          text: 'text-purple-500',
+          badgeBg: 'bg-purple-500/10',
+        }
+      case 'MANUAL_REVIEW':
+      default:
+        return {
+          border: 'border-yellow-500/40',
+          bg: 'bg-yellow-500/5',
+          text: 'text-yellow-500',
+          badgeBg: 'bg-yellow-500/10',
+        }
+    }
+  }
+
+  const theme = getDecisionTheme(decision?.decision, exp?.fraudTriggered)
 
   const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'extracted', label: 'Extracted data', icon: Table2 },
@@ -342,10 +444,10 @@ export default function ClaimDetailPage() {
 
       {tab === 'decision' && (
         <div className="space-y-4">
-          <div className="glass rounded-lg border border-border p-6 grid sm:grid-cols-3 gap-4">
+          <div className={`glass rounded-lg border ${theme.border} ${theme.bg} p-6 grid sm:grid-cols-3 gap-4`}>
             <div>
               <p className="text-xs text-muted-foreground">Decision</p>
-              <p className="text-xl font-bold">{decision?.decision || '—'}</p>
+              <p className={`text-xl font-bold ${theme.text}`}>{decision?.decision || '—'}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Approved amount</p>
@@ -373,11 +475,13 @@ export default function ClaimDetailPage() {
           )}
 
           {exp?.topReasons && exp.topReasons.length > 0 && (
-            <div className="glass rounded-lg border border-border p-4">
-              <h3 className="font-semibold mb-2">Top reasons</h3>
-              <ul className="list-disc pl-5 text-sm space-y-1 text-muted-foreground">
+            <div className={`glass rounded-lg border ${decision?.decision !== 'APPROVED' ? `${theme.border} ${theme.bg}` : 'border-border'} p-5 space-y-3`}>
+              <h3 className={`font-bold text-base flex items-center gap-2 ${decision?.decision !== 'APPROVED' ? theme.text : ''}`}>
+                <span>⚠️</span> Top Adjudication & AI Reasons
+              </h3>
+              <ul className="list-disc pl-5 text-sm space-y-1.5 text-foreground/90">
                 {exp.topReasons.map((r, i) => (
-                  <li key={i}>{r}</li>
+                  <li key={i} className="leading-relaxed">{r}</li>
                 ))}
               </ul>
             </div>

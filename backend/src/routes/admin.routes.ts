@@ -1,12 +1,17 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { exec } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { Policy } from '../models/Policy.model';
 import { Claim } from '../models/Claim.model';
 import { User } from '../models/User.model';
 import { PolicyService } from '../services/policy.service';
 import { logger } from '../utils/logger';
+import { env } from '../config/env';
+import { callLLM } from '../utils/llm.util';
 
 const router = Router();
 
@@ -192,6 +197,181 @@ router.get(
 );
 
 /**
+ * POST /admin/generate-sample
+ * Generates sample documents using Python script
+ */
+router.post(
+  '/generate-sample',
+  authMiddleware(['admin']),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { docType, variations, format, ...richData } = req.body;
+
+      const outputDirName = 'generated_' + Date.now();
+      const baseUploadsDir = path.resolve(__dirname, '../../../uploads');
+      const outputDir = path.resolve(baseUploadsDir, outputDirName);
+      
+      if (!fs.existsSync(baseUploadsDir)) {
+        fs.mkdirSync(baseUploadsDir, { recursive: true });
+      }
+      
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const pythonData = {
+        ...richData,
+        docType,
+        variations,
+        format: format || 'image',
+        outputDir,
+        date: new Date().toISOString().split('T')[0],
+        popplerPath: env.POPPLER_PATH
+      };
+
+      const scriptPath = path.resolve(__dirname, '../../medical_doc_generator/generate_single.py');
+      const pythonPath = env.PYTHON_PATH || 'python';
+      
+      // Save data to temp file to avoid command line length limits
+      const tempJsonPath = path.join(outputDir, `data_${Date.now()}.json`);
+      fs.writeFileSync(tempJsonPath, JSON.stringify(pythonData));
+      
+      const cmd = `"${pythonPath}" "${scriptPath}" "${tempJsonPath}"`;
+      
+      exec(cmd, (error, stdout, stderr) => {
+        // Cleanup temp file
+        if (fs.existsSync(tempJsonPath)) {
+          fs.unlinkSync(tempJsonPath);
+        }
+
+        if (error) {
+          logger.error(`Generation error: ${error.message}`);
+          logger.error(`Stderr: ${stderr}`);
+          return res.status(500).json({ error: 'Failed to generate documents', details: stderr });
+        }
+
+        try {
+          const result = JSON.parse(stdout);
+          const files = result.files.map((f: any) => ({
+            name: f.name,
+            url: `${env.FRONTEND_URL.replace('3000', '3001')}/uploads/${outputDirName}/${path.basename(f.path)}`
+          }));
+          return res.status(200).json({ files });
+        } catch (e) {
+          logger.error(`JSON Parse error: ${stdout}`);
+          return res.status(500).json({ error: 'Invalid response from generator' });
+        }
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /admin/generated-samples
+ * Returns list of previously generated samples
+ */
+router.get(
+  '/generated-samples',
+  authMiddleware(['admin']),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const baseUploadsDir = path.resolve(__dirname, '../../../uploads');
+      if (!fs.existsSync(baseUploadsDir)) {
+        return res.status(200).json({ folders: [] });
+      }
+
+      const folders = fs.readdirSync(baseUploadsDir)
+        .filter(f => f.startsWith('generated_'))
+        .sort((a, b) => b.localeCompare(a)) // Latest first
+        .map(folder => {
+          const folderPath = path.join(baseUploadsDir, folder);
+          const files = fs.readdirSync(folderPath).map(file => ({
+            name: file,
+            url: `${env.FRONTEND_URL.replace('3000', '3001')}/uploads/${folder}/${file}`
+          }));
+          return { name: folder, files };
+        });
+
+      return res.status(200).json({ folders });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /admin/suggest-sample-data
+ * Uses Mistral to suggest realistic medical data based on active policy
+ */
+router.post(
+  '/suggest-sample-data',
+  authMiddleware(['admin']),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { docType } = req.body;
+      const activePolicy = await Policy.findOne({ isActive: true });
+      const policyTerms = activePolicy ? JSON.stringify(activePolicy.config) : 'Standard OPD policy';
+
+      const prompt = `
+        Based on the following insurance policy terms, generate highly realistic and detailed random data for a medical ${docType}.
+        Policy Terms: ${policyTerms}
+        
+        The data should be professional and include:
+        - Comprehensive patient details (Age, Gender, Contact, Address, UHID, IP/OP No).
+        - Detailed doctor info (Name, Qualification, Registration Number).
+        - Detailed hospital info (Name, Address, Ph, Email, GSTIN, NABH status).
+        - Bill/Prescription specifics:
+          - For prescriptions: Detailed diagnosis, multiple medicines (Name, Dosage, Duration, Frequency), and prescribed tests.
+          - For bills: Itemized particulars (Consultation Fee, individual Diagnostic Tests with prices, Medications with rates/qty, Consumables), HSN/SAC codes, Tax details (CGST/SGST 9%), Total Amount in words, and Payment Details (Mode, Transaction ID, Bank).
+        
+        Return ONLY valid JSON in this format:
+        {
+          "patientDetails": { "name": "", "age": "", "gender": "", "contact": "", "address": "", "uhid": "", "ipop": "" },
+          "doctorDetails": { "name": "", "qualification": "", "regNo": "" },
+          "hospitalDetails": { "name": "", "address": "", "phone": "", "email": "", "gstin": "", "nabh": true },
+          "documentDetails": {
+            "id": "BILL/24-25/...",
+            "date": "24/05/2025",
+            "time": "11:45 AM",
+            "diagnosis": "",
+            "items": [
+              { "sno": 1, "particulars": "Consultation Fee", "hsn": "998311", "qty": 1, "rate": 500, "amount": 500 },
+              ...
+            ],
+            "medicines": [
+              { "name": "Paracetamol 650mg", "dosage": "1-0-1", "duration": "5 days", "frequency": "After Food" },
+              ...
+            ],
+            "tests": ["Complete Blood Count (CBC)", "X-Ray Chest"],
+            "subTotal": 0,
+            "cgst": 0,
+            "sgst": 0,
+            "totalAmount": 0,
+            "amountInWords": "",
+            "paymentDetails": { "mode": "Card/UPI/Cash", "transactionId": "", "bank": "", "date": "" }
+          }
+        }
+      `;
+
+      const response = await callLLM(prompt, "You are a medical data generator for insurance testing.", true);
+      const data = JSON.parse(response);
+      return res.status(200).json(data);
+    } catch (err) {
+      logger.error('Failed to suggest sample data:', err);
+      // Fallback data
+      return res.status(200).json({
+        patientName: 'John Doe',
+        diagnosis: 'Acute Gastritis',
+        doctorName: 'Dr. Robert Smith',
+        hospitalInfo: 'City General Hospital, New York'
+      });
+    }
+  }
+);
+
+/**
  * GET /admin/users
  * Reviewers management
  */
@@ -237,16 +417,7 @@ router.post(
       });
 
       await newUser.save();
-      logger.info(`New user account registered by Admin: ${email}`);
-
-      return res.status(201).json({
-        user: {
-          id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role
-        }
-      });
+      return res.status(201).json({ message: 'User created successfully', user: { email, name, role } });
     } catch (err) {
       next(err);
     }

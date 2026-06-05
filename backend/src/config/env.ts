@@ -25,12 +25,13 @@ if (!process.env.JWT_PRIVATE_KEY || !process.env.JWT_PUBLIC_KEY) {
 const envSchema = z.object({
   PORT: z.string().transform((val) => parseInt(val, 10)).default('3001'),
   MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/plum_opd'),
-  JWT_PRIVATE_KEY: z.string().default(() => fallbackPrivateKey),
-  JWT_PUBLIC_KEY: z.string().default(() => fallbackPublicKey),
+  JWT_PRIVATE_KEY: z.string().transform((val) => val || fallbackPrivateKey).default(() => fallbackPrivateKey),
+  JWT_PUBLIC_KEY: z.string().transform((val) => val || fallbackPublicKey).default(() => fallbackPublicKey),
   GEMINI_API_KEY: z.string().optional().default(''), // allow empty for mock/fallback mode
   CLOUDINARY_CLOUD_NAME: z.string().optional().default(''),
   CLOUDINARY_API_KEY: z.string().optional().default(''),
   CLOUDINARY_API_SECRET: z.string().optional().default(''),
+  MISTRAL_API_KEY: z.string().optional().default(''),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PYTHON_PATH: z.string().optional().default('python'),

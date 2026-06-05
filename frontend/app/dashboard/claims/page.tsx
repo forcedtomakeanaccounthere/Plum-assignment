@@ -158,13 +158,30 @@ export default function ClaimsPage() {
                         {formatRelativeDate(claim.submittedAt)}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => router.push(`/dashboard/claims/${claim.claimId}`)}
-                          className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
-                        >
-                          <span className="text-sm font-medium">View</span>
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {claim.adjudicationExplainability?.fraudTriggered && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-semibold animate-pulse">
+                              ⚠️ Fraud Flag
+                            </span>
+                          )}
+                          {status === 'partial' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-500 text-xs font-semibold">
+                              ⚠️ Partial
+                            </span>
+                          )}
+                          {status === 'rejected' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-semibold">
+                              ⚠️ Rejected
+                            </span>
+                          )}
+                          <button
+                            onClick={() => router.push(`/dashboard/claims/${claim.claimId}`)}
+                            className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors ml-2"
+                          >
+                            <span className="text-sm font-medium">View</span>
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

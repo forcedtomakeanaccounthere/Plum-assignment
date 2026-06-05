@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import path from 'path';
 import { env } from './config/env';
 import { connectDB } from './config/db';
 import { logger } from './utils/logger';
@@ -21,12 +22,13 @@ const app = express();
 
 // Security Middlewares
 app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https://res.cloudinary.com"],
+      imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "http://localhost:3001"],
       connectSrc: ["'self'"],
       upgradeInsecureRequests: [],
     }
@@ -43,6 +45,9 @@ app.use(compression());
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static uploads
+app.use('/uploads', express.static(path.resolve(__dirname, '../../uploads')));
 
 // Health Check Endpoint (configured to warm Render instances)
 app.get('/health', (req, res) => {

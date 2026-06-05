@@ -1,0 +1,1 @@
+pillow reportlab faker numpy opencv-python imgaug xhtml2pdf jinja2 pdf2image

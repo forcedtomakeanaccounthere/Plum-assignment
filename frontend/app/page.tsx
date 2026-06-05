@@ -31,21 +31,21 @@ export default function Page() {
 
         <div className="grid md:grid-cols-3 gap-4">
           <div className="glass rounded-lg border border-border p-6 space-y-2">
-            <Zap className="h-8 w-8 text-primary/70" />
+            <Zap className="h-8 w-8 text-primary/70 text-red-400/70" />
             <h3 className="font-semibold">Real-time processing</h3>
             <p className="text-sm text-muted-foreground">
               Upload bills and prescriptions; watch OCR, extraction, and adjudication live via SSE.
             </p>
           </div>
           <div className="glass rounded-lg border border-border p-6 space-y-2">
-            <Shield className="h-8 w-8 text-emerald-400/70" />
+            <Shield className="h-8 w-8 text-red-400/70" />
             <h3 className="font-semibold">Policy engine</h3>
             <p className="text-sm text-muted-foreground">
               Claims are validated against your active OPD policy with programmatic and AI soft rules.
             </p>
           </div>
           <div className="glass rounded-lg border border-border p-6 space-y-2">
-            <FileText className="h-8 w-8 text-yellow-400/70" />
+            <FileText className="h-8 w-8 text-red-400/70" />
             <h3 className="font-semibold">Document chat (RAG)</h3>
             <p className="text-sm text-muted-foreground">
               Ask questions about a claim&apos;s documents after processing completes.
