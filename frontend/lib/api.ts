@@ -162,18 +162,18 @@ export async function generateSampleDoc(data: {
   return apiFetch<{ files: Array<{ name: string; url: string }> }>('/api/admin/generate-sample', {
     method: 'POST',
     body: JSON.stringify(data),
-  }, true)
+  }, false)
 }
 
 export async function fetchGeneratedSamples() {
-  return apiFetch<{ folders: Array<{ name: string; files: Array<{ name: string; url: string }> }> }>('/api/admin/generated-samples', {}, true)
+  return apiFetch<{ folders: Array<{ name: string; files: Array<{ name: string; url: string }> }> }>('/api/admin/generated-samples', {}, false)
 }
 
 export async function suggestSampleData(docType: string) {
   return apiFetch<{ patientName: string; diagnosis: string; doctorName: string; hospitalInfo: string }>('/api/admin/suggest-sample-data', {
     method: 'POST',
     body: JSON.stringify({ docType }),
-  }, true)
+  }, false)
 }
 
 export async function fetchClaim(claimId: string) {

@@ -319,7 +319,13 @@ export default function SettingsPage() {
       const active = res.history?.find((h: any) => h.isActive)
       setVersion(active?.version ?? null)
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Failed to load policy')
+      const msg = e instanceof Error ? e.message : 'Failed to load policy'
+      setLoadError(msg)
+      if (msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('expired')) {
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('user')
+        setAuthenticated(false)
+      }
     } finally {
       setLoadingPolicy(false)
     }

@@ -526,7 +526,13 @@ async function processClaimPipeline(
       const doc = claim.documents[i];
       if (doc.processingStatus === 'ocr_done' && doc.ocrText) {
         try {
-          const parsedFields = await ExtractionService.extractFields(doc.ocrText, doc.type);
+          // Add timeout to extraction
+          const extractionPromise = ExtractionService.extractFields(doc.ocrText, doc.type);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('AI extraction timed out after 30s')), 30000)
+          );
+          
+          const parsedFields = await Promise.race([extractionPromise, timeoutPromise]) as any;
           doc.extractedFields = parsedFields;
           doc.processingStatus = 'extracted';
           
@@ -536,7 +542,8 @@ async function processClaimPipeline(
           }
         } catch (err: any) {
           doc.processingStatus = 'failed';
-          logger.error(`LLM extraction failed on document index ${i} for claim ${claimId}:`, err);
+          logger.error(`LLM extraction failed or timed out on document index ${i} for claim ${claimId}:`, err);
+          // Don't halt entire pipeline if one doc fails extraction
         }
       }
     }

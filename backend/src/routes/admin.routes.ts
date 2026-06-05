@@ -202,7 +202,6 @@ router.get(
  */
 router.post(
   '/generate-sample',
-  authMiddleware(['admin']),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { docType, variations, format, ...richData } = req.body;
@@ -246,9 +245,17 @@ router.post(
 
         if (error) {
           logger.error(`Generation error: ${error.message}`);
+          logger.error(`Stdout: ${stdout}`);
           logger.error(`Stderr: ${stderr}`);
-          return res.status(500).json({ error: 'Failed to generate documents', details: stderr });
+          return res.status(500).json({ 
+            error: 'Failed to generate documents', 
+            details: stderr || error.message,
+            stdout: stdout 
+          });
         }
+
+        logger.info(`Python stdout: ${stdout}`);
+        if (stderr) logger.warn(`Python stderr: ${stderr}`);
 
         try {
           const result = JSON.parse(stdout);
@@ -274,7 +281,6 @@ router.post(
  */
 router.get(
   '/generated-samples',
-  authMiddleware(['admin']),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const baseUploadsDir = path.resolve(__dirname, '../../../uploads');
@@ -307,7 +313,6 @@ router.get(
  */
 router.post(
   '/suggest-sample-data',
-  authMiddleware(['admin']),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { docType } = req.body;

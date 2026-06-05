@@ -1,17 +1,23 @@
 # generate_single.py
 
-import cv2
-import numpy as np
-import json
 import sys
 import os
-import random
-from PIL import Image
-from xhtml2pdf import pisa
-from jinja2 import Template
-from pdf2image import convert_from_path
-from augmentations import *
-import io
+
+try:
+    import cv2
+    import numpy as np
+    import json
+    import random
+    from PIL import Image
+    from xhtml2pdf import pisa
+    from jinja2 import Template
+    from pdf2image import convert_from_path
+    from augmentations import *
+    import io
+except ImportError as e:
+    sys.stderr.write(f"CRITICAL: Missing Python dependency: {str(e)}\n")
+    sys.stderr.write("Please run: pip install -r requirements.txt\n")
+    sys.exit(1)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -362,10 +368,17 @@ def main():
             images = convert_from_path(temp_pdf, dpi=200, poppler_path=poppler_path)
         else:
             images = convert_from_path(temp_pdf, dpi=200)
+        
+        if not images:
+            raise Exception("No images generated from PDF")
+            
     except Exception as e:
         print(f"Error converting PDF to image: {e}")
+        # Final fallback: if poppler fails, we might be on a system where it's not installed
+        # but we need to report this clearly to the user
+        sys.stderr.write(f"CRITICAL: PDF to Image conversion failed. Is Poppler installed? Error: {str(e)}\n")
         if os.path.exists(temp_pdf): os.remove(temp_pdf)
-        return
+        sys.exit(1)
 
     base_img_pil = images[0]
     base_img_cv = cv2.cvtColor(np.array(base_img_pil), cv2.COLOR_RGB2BGR)

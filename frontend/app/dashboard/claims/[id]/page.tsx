@@ -408,9 +408,9 @@ export default function ClaimDetailPage() {
               </div>
               {doc.cloudinaryUrl && (
                 <div className="space-y-2">
-                  {doc.mediaFormat === 'pdf' || doc.cloudinaryUrl.includes('.pdf') ? (
+                  {doc.mediaFormat === 'pdf' || doc.cloudinaryUrl.toLowerCase().includes('.pdf') ? (
                     <a
-                      href={doc.cloudinaryUrl}
+                      href={doc.cloudinaryUrl.startsWith('http') ? doc.cloudinaryUrl : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${doc.cloudinaryUrl}`}
                       target="_blank"
                       rel="noreferrer"
                       className="block text-center py-8 rounded border border-dashed text-primary hover:underline text-sm"
@@ -418,17 +418,21 @@ export default function ClaimDetailPage() {
                       Open PDF in new tab
                     </a>
                   ) : (
-                    <a href={doc.cloudinaryUrl} target="_blank" rel="noreferrer">
+                    <a 
+                      href={doc.cloudinaryUrl.startsWith('http') ? doc.cloudinaryUrl : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${doc.cloudinaryUrl}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={doc.cloudinaryUrl}
+                        src={doc.cloudinaryUrl.startsWith('http') ? doc.cloudinaryUrl : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${doc.cloudinaryUrl}`}
                         alt={doc.type}
                         className="rounded border border-border max-h-48 w-full object-contain bg-black/20"
                       />
                     </a>
                   )}
                   <a
-                    href={doc.cloudinaryUrl}
+                    href={doc.cloudinaryUrl.startsWith('http') ? doc.cloudinaryUrl : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${doc.cloudinaryUrl}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex w-full items-center justify-center rounded-lg border border-border px-3 py-2 text-sm hover:bg-secondary/20"

@@ -2,24 +2,21 @@ import workerpool from 'workerpool';
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
 
-async function performOcr(imageBuffer: Buffer): Promise<string> {
-  let processedBuffer = imageBuffer;
+export async function performOcr(imageBuffer: Buffer): Promise<string> {
   try {
-    // Preprocess: grayscale, normalize, denoise (thresholding can binarize)
-    processedBuffer = await sharp(imageBuffer)
+    // Pre-process image with sharp for better OCR accuracy and potential speedup
+    const processedBuffer = await sharp(imageBuffer)
       .greyscale()
       .normalize()
       .toBuffer();
-  } catch (err) {
-    console.error('Sharp preprocessing error (proceeding with raw):', err);
-  }
 
-  const worker = await createWorker('eng');
-  try {
+    const worker = await createWorker('eng');
     const { data: { text } } = await worker.recognize(processedBuffer);
-    return text;
-  } finally {
     await worker.terminate();
+    return text;
+  } catch (err) {
+    console.error('OCR Worker Error:', err);
+    throw err;
   }
 }
 
@@ -29,4 +26,3 @@ if (typeof process.send === 'function') {
     performOcr
   });
 }
-export { performOcr };
