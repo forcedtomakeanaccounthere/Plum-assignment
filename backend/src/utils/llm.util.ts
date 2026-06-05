@@ -72,30 +72,30 @@ export async function callMistral(
 }
 
 /**
- * Unified LLM caller with fallback: Mistral -> Gemini -> Mock
+ * Unified LLM caller with fallback: Gemini -> Mistral -> Mock
  */
 export async function callLLM(
   prompt: string,
   systemInstruction?: string,
   jsonMode: boolean = false
 ): Promise<string> {
-  // 1. Try Mistral
-  if (env.MISTRAL_API_KEY) {
-    try {
-      logger.info('Attempting Mistral API call...');
-      return await callMistral(prompt, systemInstruction, jsonMode);
-    } catch (err: any) {
-      logger.warn('Mistral call failed or exhausted, falling back to Gemini:', err.message);
-    }
-  }
-
-  // 2. Try Gemini
+  // 1. Try Gemini first for lower latency and consistent assignment behavior.
   if (env.GEMINI_API_KEY) {
     try {
       logger.info('Attempting Gemini API call...');
       return await callGemini(prompt, systemInstruction, jsonMode);
     } catch (err: any) {
-      logger.warn('Gemini call failed, falling back to Mock:', err.message);
+      logger.warn('Gemini call failed, falling back to Mistral:', err.message);
+    }
+  }
+
+  // 2. Try Mistral
+  if (env.MISTRAL_API_KEY) {
+    try {
+      logger.info('Attempting Mistral API call...');
+      return await callMistral(prompt, systemInstruction, jsonMode);
+    } catch (err: any) {
+      logger.warn('Mistral call failed or exhausted, falling back to Mock:', err.message);
     }
   }
 
@@ -110,16 +110,18 @@ export async function callLLM(
 export async function callGemini(
   prompt: string,
   systemInstruction?: string,
-  jsonMode: boolean = false
+  jsonMode: boolean = false,
+  imageBuffer?: Buffer,
+  mimeType?: string
 ): Promise<string> {
-  const model = 'gemini-2.0-flash';
+  const model = imageBuffer ? 'gemini-1.5-flash' : 'gemini-2.0-flash';
   
   if (!aiClient) {
     logger.warn('GEMINI_API_KEY is not configured or client failed to init. Running in MOCK fallback mode.');
     return getMockLLMResponse(prompt);
   }
 
-  const maxAttempts = 3;
+  const maxAttempts = 2;
   let attempt = 0;
   
   while (attempt < maxAttempts) {
@@ -127,11 +129,22 @@ export async function callGemini(
     try {
       const cleanedPrompt = prompt.trim();
       
+      let contents: any[] = [{ text: cleanedPrompt }];
+      
+      if (imageBuffer && mimeType) {
+        contents.push({
+          inlineData: {
+            data: imageBuffer.toString('base64'),
+            mimeType: mimeType
+          }
+        });
+      }
+
       const generateParams: any = {
         model,
-        contents: cleanedPrompt,
+        contents: [{ role: 'user', parts: contents }],
         config: {
-          temperature: 0.2,
+          temperature: 0.1,
         },
       };
 
@@ -143,9 +156,11 @@ export async function callGemini(
         generateParams.config.responseMimeType = 'application/json';
       }
 
-      const response = await (aiClient as any).models.generateContent(generateParams);
-      if (response.text) {
-        return response.text;
+      const response = await aiClient.models.generateContent(generateParams);
+      const text = response.text;
+      
+      if (text) {
+        return text;
       }
       throw new Error('Gemini returned an empty text response.');
     } catch (error: any) {
@@ -162,7 +177,7 @@ export async function callGemini(
         return getMockLLMResponse(prompt);
       }
       
-      const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+      const backoffMs = 500 + Math.random() * 500;
       logger.info(`Retrying Gemini call in ${backoffMs.toFixed(0)}ms...`);
       await sleep(backoffMs);
     }

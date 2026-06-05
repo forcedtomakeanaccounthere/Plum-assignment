@@ -26,16 +26,14 @@ export class RAGService {
       claim.vectorStore = [];
     }
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunkText = chunks[i];
-      const vector = await getEmbedding(chunkText);
-      claim.vectorStore.push({
+    const embeddedChunks = await Promise.all(chunks.map(async (chunkText, i) => ({
         chunkIndex: i,
         documentType,
         rawText: chunkText,
-        vector
-      });
-    }
+        vector: await getEmbedding(chunkText)
+    })));
+
+    claim.vectorStore.push(...embeddedChunks);
 
     await claim.save();
     logger.info(`RAG: Indexed ${chunks.length} chunks for claim ${claimId}.`);
@@ -137,7 +135,7 @@ ${policyString}
 
 USER QUESTION: ${query}
 
-Answer in plain English (max 150 words). Reference specific document types when possible.
+Answer in clean Markdown (max 150 words). Use short bullet points when listing items. Do not use raw asterisks for emphasis unless the output is valid Markdown.
 `;
 
     // 5. Generate response using LLM

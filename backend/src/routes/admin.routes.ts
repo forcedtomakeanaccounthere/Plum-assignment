@@ -12,8 +12,15 @@ import { PolicyService } from '../services/policy.service';
 import { logger } from '../utils/logger';
 import { env } from '../config/env';
 import { callLLM } from '../utils/llm.util';
+import { CloudinaryUtil } from '../utils/cloudinary.util';
 
 const router = Router();
+
+function getBackendOrigin(req: Request): string {
+  const forwardedProto = req.get('x-forwarded-proto') || req.protocol;
+  const forwardedHost = req.get('x-forwarded-host') || req.get('host');
+  return forwardedHost ? `${forwardedProto}://${forwardedHost}` : `http://localhost:${env.PORT}`;
+}
 
 // Zod Schema to validate policy JSON structure
 const PolicyConfigZodSchema = z
@@ -28,8 +35,16 @@ const PolicyConfigZodSchema = z
   .passthrough();
 
 /**
- * GET /admin/policy
- * Returns active policy config and config version list
+ * @swagger
+ * /api/admin/policy:
+ *   get:
+ *     summary: Get active policy and history
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Policy configuration
  */
 router.get(
   '/policy',
@@ -55,8 +70,22 @@ router.get(
 );
 
 /**
- * POST /admin/policy
- * Validate and upload new policy
+ * @swagger
+ * /api/admin/policy:
+ *   post:
+ *     summary: Upload new policy configuration
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Policy uploaded
  */
 router.post(
   '/policy',
@@ -130,8 +159,14 @@ router.post(
 );
 
 /**
- * GET /admin/metrics
- * Bento Grid analytics
+ * @swagger
+ * /api/admin/metrics:
+ *   get:
+ *     summary: Get dashboard analytics metrics
+ *     tags: [Admin]
+ *     responses:
+ *       200:
+ *         description: Metrics data
  */
 router.get(
   '/metrics',
@@ -291,11 +326,31 @@ router.post(
 
         try {
           const result = JSON.parse(stdout);
-          const files = result.files.map((f: any) => ({
-            name: f.name,
-            url: `${env.FRONTEND_URL.replace('3000', '3001')}/uploads/${outputDirName}/${path.basename(f.path)}`
-          }));
-          return res.status(200).json({ files });
+          
+          // Use Promise.all to upload all generated files to Cloudinary if available
+          const uploadPromises = result.files.map(async (f: any) => {
+            if (CloudinaryUtil.isConfigured()) {
+              try {
+                const cloudinaryUrl = await CloudinaryUtil.uploadFile(f.path, `samples/${outputDirName}`);
+                return {
+                  name: f.name,
+                  url: cloudinaryUrl
+                };
+              } catch (err) {
+                logger.warn(`Cloudinary upload failed for sample ${f.name}, falling back to local URL`);
+              }
+            }
+            
+            // Fallback to local URL if Cloudinary fails or is not configured
+            return {
+              name: f.name,
+              url: `${getBackendOrigin(req)}/uploads/${outputDirName}/${path.basename(f.path)}`
+            };
+          });
+
+          Promise.all(uploadPromises).then(files => {
+            return res.status(200).json({ files });
+          });
         } catch (e) {
           logger.error(`JSON Parse error: ${stdout}`);
           return res.status(500).json({ error: 'Invalid response from generator' });
@@ -308,8 +363,14 @@ router.post(
 );
 
 /**
- * GET /admin/generated-samples
- * Returns list of previously generated samples
+ * @swagger
+ * /api/admin/generated-samples:
+ *   get:
+ *     summary: List previously generated sample documents
+ *     tags: [Admin]
+ *     responses:
+ *       200:
+ *         description: List of folders and files
  */
 router.get(
   '/generated-samples',
@@ -327,7 +388,7 @@ router.get(
           const folderPath = path.join(baseUploadsDir, folder);
           const files = fs.readdirSync(folderPath).map(file => ({
             name: file,
-            url: `${env.FRONTEND_URL.replace('3000', '3001')}/uploads/${folder}/${file}`
+            url: `${getBackendOrigin(req)}/uploads/${folder}/${file}`
           }));
           return { name: folder, files };
         });
@@ -340,8 +401,23 @@ router.get(
 );
 
 /**
- * POST /admin/suggest-sample-data
- * Uses Mistral to suggest realistic medical data based on active policy
+ * @swagger
+ * /api/admin/suggest-sample-data:
+ *   post:
+ *     summary: Use AI to suggest realistic data for samples
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               docType:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Suggested JSON data
  */
 router.post(
   '/suggest-sample-data',

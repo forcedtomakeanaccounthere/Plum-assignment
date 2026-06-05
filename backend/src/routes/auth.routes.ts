@@ -15,7 +15,13 @@ const loginSchema = z.object({
 
 // Helper to sign tokens using RS256 private key
 function signAccessToken(user: any): string {
-  const key = env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n');
+  const key = env.JWT_PRIVATE_KEY;
+  
+  if (!key.includes('-----BEGIN PRIVATE KEY-----') && !key.includes('-----BEGIN RSA PRIVATE KEY-----')) {
+    logger.error('JWT_PRIVATE_KEY is not in valid PEM format for RS256.');
+    throw new Error('Server configuration error: JWT_PRIVATE_KEY is not a valid RSA key.');
+  }
+
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
     key,
@@ -24,7 +30,7 @@ function signAccessToken(user: any): string {
 }
 
 function signRefreshToken(user: any): string {
-  const key = env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n');
+  const key = env.JWT_PRIVATE_KEY;
   return jwt.sign(
     { id: user._id },
     key,
@@ -153,7 +159,7 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
     }
 
     try {
-      const key = env.JWT_PUBLIC_KEY.replace(/\\n/g, '\n');
+      const key = env.JWT_PUBLIC_KEY;
       const decoded = jwt.verify(refreshToken, key, {
         algorithms: ['RS256']
       }) as { id: string };

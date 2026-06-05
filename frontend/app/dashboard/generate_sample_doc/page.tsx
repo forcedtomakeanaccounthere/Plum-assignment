@@ -354,7 +354,7 @@ export default function GenerateSampleDocPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Generate Advanced Sample Data</h1>
           <p className="text-muted-foreground mt-1">
-            Create professional-grade medical documents using HTML templates and Mistral AI.
+            Create professional-grade medical documents using HTML templates and Gemini AI.
           </p>
         </div>
         <div className="flex gap-2 bg-secondary/30 p-1 rounded-lg border border-border">

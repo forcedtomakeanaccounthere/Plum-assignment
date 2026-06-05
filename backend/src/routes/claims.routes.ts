@@ -408,8 +408,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 /**
- * GET /claims/:id
- * Full Claim details
+ * @swagger
+ * /api/claims/{id}:
+ *   get:
+ *     summary: Get full details of a specific claim
+ *     tags: [Claims]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Claim details
+ *       404:
+ *         description: Claim not found
  */
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -424,8 +438,42 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 /**
- * PATCH /claims/:id/decision
- * Override decision (role required: admin | reviewer)
+ * @swagger
+ * /api/claims/{id}/decision:
+ *   patch:
+ *     summary: Override claim decision (Admin/Reviewer only)
+ *     tags: [Claims]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - decision
+ *               - reason
+ *             properties:
+ *               decision:
+ *                 type: string
+ *                 enum: [APPROVED, REJECTED, PARTIAL, MANUAL_REVIEW]
+ *               approvedAmount:
+ *                 type: number
+ *               reason:
+ *                 type: string
+ *                 minLength: 20
+ *     responses:
+ *       200:
+ *         description: Decision updated successfully
+ *       403:
+ *         description: Insufficient permissions
  */
 router.patch(
   '/:id/decision',
@@ -569,9 +617,7 @@ async function processClaimPipeline(
     // -------------------------------------------------------------
     sendSSEEvent(claimId, 'data', { step: 'extraction', status: 'start', message: 'Extracting structured data fields using AI...' });
     
-    let primaryExtractedFields: any = null;
-    for (let i = 0; i < claim.documents.length; i++) {
-      const doc = claim.documents[i];
+    const extractionResults = await Promise.all(claim.documents.map(async (doc, i) => {
       if (doc.processingStatus === 'ocr_done' && doc.ocrText) {
         try {
           // Add timeout to extraction
@@ -581,18 +627,26 @@ async function processClaimPipeline(
           );
           
           const parsedFields = await Promise.race([extractionPromise, timeoutPromise]) as any;
-          doc.extractedFields = parsedFields;
-          doc.processingStatus = 'extracted';
-          
-          // Use prescription as the primary source of metadata if available
-          if (doc.type === 'prescription' || !primaryExtractedFields) {
-            primaryExtractedFields = parsedFields;
-          }
+          return { index: i, parsedFields };
         } catch (err: any) {
-          doc.processingStatus = 'failed';
           logger.error(`LLM extraction failed or timed out on document index ${i} for claim ${claimId}:`, err);
-          // Don't halt entire pipeline if one doc fails extraction
+          return { index: i, error: err };
         }
+      }
+      return { index: i };
+    }));
+
+    let primaryExtractedFields: any = null;
+    for (const result of extractionResults) {
+      const doc = claim.documents[result.index];
+      if ('parsedFields' in result && result.parsedFields) {
+        doc.extractedFields = result.parsedFields;
+        doc.processingStatus = 'extracted';
+        if (doc.type === 'prescription' || !primaryExtractedFields) {
+          primaryExtractedFields = result.parsedFields;
+        }
+      } else if ('error' in result && result.error) {
+        doc.processingStatus = 'failed';
       }
     }
 

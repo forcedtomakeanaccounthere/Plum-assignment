@@ -20,7 +20,17 @@ export function authMiddleware(roles?: Array<'admin' | 'reviewer' | 'viewer'>) {
 
     const token = authHeader.split(' ')[1];
     try {
-      const key = env.JWT_PUBLIC_KEY.replace(/\\n/g, '\n');
+      const key = env.JWT_PUBLIC_KEY;
+      
+      // Basic check for PEM format if RS256 is used
+      if (!key.includes('-----BEGIN PUBLIC KEY-----') && !key.includes('-----BEGIN RSA PUBLIC KEY-----')) {
+        logger.error('JWT_PUBLIC_KEY is not in valid PEM format for RS256.');
+        return res.status(500).json({ 
+          error: 'Server configuration error: Invalid JWT Key format.',
+          details: 'RS256 requires a valid RSA Public Key. Please run "node scripts/generate-keys.js" and update your environment variables.'
+        });
+      }
+
       // Validate using RS256 algorithm with public key
       const decoded = jwt.verify(token, key, {
         algorithms: ['RS256']

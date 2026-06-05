@@ -27,6 +27,32 @@ import {
 type TabId = 'extracted' | 'documents' | 'decision'
 type PipelineStep = { step: string; status: string; message: string }
 
+function formatChatSegments(content: string) {
+  const normalized = content
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^\s*-\s*/gm, '\n- ')
+    .trim()
+  const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean)
+  const segments: Array<{ type: 'p' | 'li'; text: string }> = []
+
+  for (const line of lines) {
+    if (line.startsWith('- ')) {
+      segments.push({ type: 'li', text: line.slice(2).trim() })
+      continue
+    }
+
+    const inlineBullets = line.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean)
+    if (inlineBullets.length > 1) {
+      segments.push({ type: 'p', text: inlineBullets[0] })
+      inlineBullets.slice(1).forEach((part) => segments.push({ type: 'li', text: part }))
+    } else {
+      segments.push({ type: 'p', text: line })
+    }
+  }
+
+  return segments
+}
+
 function fieldValue(v: unknown): string {
   if (v == null) return '—'
   if (typeof v === 'object' && v !== null && 'value' in v) {
@@ -565,7 +591,22 @@ export default function ClaimDetailPage() {
                   key={i}
                   className={`p-2 rounded-lg text-sm ${m.role === 'user' ? 'bg-primary/10 ml-6' : 'bg-secondary/20 mr-6'}`}
                 >
-                  {m.content}
+                  {m.role === 'assistant' ? (
+                    <div className="space-y-1">
+                      {formatChatSegments(m.content).map((segment, idx) =>
+                        segment.type === 'li' ? (
+                          <div key={idx} className="flex gap-2 pl-1">
+                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary/70 shrink-0" />
+                            <span>{segment.text}</span>
+                          </div>
+                        ) : (
+                          <p key={idx}>{segment.text}</p>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    m.content
+                  )}
                 </div>
               ))}
             </div>

@@ -36,8 +36,9 @@ app.use(helmet({
   }
 }));
 
+const configuredFrontendUrl = env.FRONTEND_URL.replace(/\/$/, '');
 const allowedOrigins = [
-  env.FRONTEND_URL,
+  configuredFrontendUrl,
   'https://plum-assignment-gules.vercel.app',
   'http://localhost:3000'
 ];
@@ -46,7 +47,12 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || env.NODE_ENV === 'development') {
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    if (
+      allowedOrigins.includes(normalizedOrigin) ||
+      /\.vercel\.app$/.test(new URL(normalizedOrigin).hostname) ||
+      env.NODE_ENV === 'development'
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
