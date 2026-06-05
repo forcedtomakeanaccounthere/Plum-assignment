@@ -3,6 +3,7 @@ import { PolicyService } from './policy.service';
 import { callGemini } from '../utils/llm.util';
 import { FraudService } from './fraud.service';
 import { logger } from '../utils/logger';
+import { buildExplainability } from '../utils/explainability.util';
 
 export interface RuleCheckResult {
   pass: boolean;
@@ -582,18 +583,18 @@ Return JSON:
       };
     }
     
-    // Partial coverage cases
+    // Partial coverage cases — always needs human confirmation
     if (ruleResult.partial || aiResult.recommendation === 'PARTIAL') {
       const finalApprovedAmount = Math.min(ruleResult.maxApprovable, aiResult.approved_amount);
       const combinedDeductions = ruleResult.deductions.length > 0 ? ruleResult.deductions : aiResult.deductions;
-      
+
       return {
         decision: 'PARTIAL',
         approvedAmount: finalApprovedAmount,
-        rejectionReasons: aiResult.rejection_reasons.length > 0 ? aiResult.rejection_reasons : ['Excluded Items'],
+        rejectionReasons: aiResult.rejection_reasons.length > 0 ? aiResult.rejection_reasons : ['PARTIAL_COVERAGE'],
         deductions: combinedDeductions,
         confidenceScore: aiResult.confidence,
-        notes: aiResult.reasoning
+        notes: `${aiResult.reasoning} [Partial approval — human review recommended to confirm covered vs excluded amounts.]`
       };
     }
     
@@ -619,6 +620,17 @@ Return JSON:
       confidenceScore: aiResult.confidence,
       notes: aiResult.reasoning
     };
+  }
+
+  /**
+   * Build structured explainability payload for UI and audit.
+   */
+  static buildExplainabilityPayload(
+    ruleResult: Parameters<typeof buildExplainability>[0],
+    aiResult: Parameters<typeof buildExplainability>[1],
+    fused: Parameters<typeof buildExplainability>[2]
+  ) {
+    return buildExplainability(ruleResult, aiResult, fused);
   }
 }
 
