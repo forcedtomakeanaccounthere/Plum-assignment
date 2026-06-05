@@ -9,6 +9,11 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    pkg-config \
+    libcairo2-dev \
+    libjpeg-dev \
+    libgif-dev \
+    libpango1.0-dev \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -44,6 +49,8 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    libcairo2 \
+    libpangocairo-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
