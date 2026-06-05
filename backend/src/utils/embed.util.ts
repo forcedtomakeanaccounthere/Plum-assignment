@@ -15,7 +15,8 @@ if (env.GEMINI_API_KEY) {
  * Generate 768-dimensional text embedding
  */
 export async function getEmbedding(text: string): Promise<number[]> {
-  const model = 'text-embedding-004';
+  const model = 'gemini-embedding-001';
+  // const model = 'text-embedding-004';
   
   if (!aiClient) {
     // Return dummy 768-dimensional vector if Gemini API is not configured

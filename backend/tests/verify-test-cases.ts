@@ -151,7 +151,7 @@ async function runVerification() {
 
       // Verify outcomes
       const decisionMatches = claim.finalDecision.decision === expected.decision;
-      const amountMatches = claim.finalDecision.approvedAmount === expected.approved_amount;
+      const amountMatches = claim.finalDecision.approvedAmount === (expected.approved_amount ?? 0);
       
       let rejectionReasonMatches = true;
       if (expected.rejection_reasons) {

@@ -1,6 +1,6 @@
 import { Claim } from '../models/Claim.model';
 import { getEmbedding, cosineSimilarity } from '../utils/embed.util';
-import { callGemini } from '../utils/llm.util';
+import { callLLM } from '../utils/llm.util';
 import { PolicyService } from './policy.service';
 import { logger } from '../utils/logger';
 
@@ -140,8 +140,8 @@ USER QUESTION: ${query}
 Answer in plain English (max 150 words). Reference specific document types when possible.
 `;
 
-    // 5. Generate response using Gemini
-    const reply = await callGemini(prompt, systemInstruction, false);
+    // 5. Generate response using LLM
+    const reply = await callLLM(prompt, systemInstruction, false);
 
     // 6. Persist chat message in claim history
     claim.chatHistory.push({

@@ -1,9 +1,9 @@
-import { callGemini } from '../utils/llm.util';
+import { callLLM } from '../utils/llm.util';
 import { logger } from '../utils/logger';
 
 export class ExtractionService {
   /**
-   * Calls Gemini to parse the OCR text into a structured JSON schema.
+   * Calls LLM to parse the OCR text into a structured JSON schema.
    */
   static async extractFields(ocrText: string, documentType: string): Promise<Record<string, any>> {
     logger.info(`Starting LLM field extraction for document type: ${documentType}`);
@@ -39,7 +39,7 @@ Return only the JSON object, no markdown, no explanation.
 `;
 
     try {
-      const resultText = await callGemini(prompt, systemInstruction, true);
+      const resultText = await callLLM(prompt, systemInstruction, true);
       // Clean up markdown block wraps if returned
       let cleanedJson = resultText.trim();
       if (cleanedJson.startsWith('```json')) {

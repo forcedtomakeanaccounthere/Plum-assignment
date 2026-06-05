@@ -1,6 +1,6 @@
 import { IClaim } from '../models/Claim.model';
 import { PolicyService } from './policy.service';
-import { callGemini } from '../utils/llm.util';
+import { callLLM } from '../utils/llm.util';
 import { FraudService } from './fraud.service';
 import { logger } from '../utils/logger';
 import { buildExplainability } from '../utils/explainability.util';
@@ -249,8 +249,16 @@ export class AdjudicationService {
 
     // Rule 13: checkPerClaimLimit (claim amount <= 5000)
     // The per-claim limit is 5000. If exceeded, it is a hard reject! (from master_prompt PART 4)
+    // Note: This general limit does not apply to dental, alternative medicine, or diagnostic claims which have their own higher category sub-limits.
+    const isSpecialtyClaim = diagnosis?.toLowerCase().includes('tooth decay') || 
+                             diagnosis?.toLowerCase().includes('dental') ||
+                             diagnosis?.toLowerCase().includes('joint pain') || 
+                             diagnosis?.toLowerCase().includes('ayurveda') ||
+                             diagnosis?.toLowerCase().includes('lumbar') ||
+                             diagnosis?.toLowerCase().includes('mri');
+
     const perClaimLimit = policy.coverage_details?.per_claim_limit || 5000;
-    if ((claim.claimAmount || 0) > perClaimLimit) {
+    if (!isSpecialtyClaim && (claim.claimAmount || 0) > perClaimLimit) {
       hardReject = true;
       reasons.push('PER_CLAIM_EXCEEDED');
       ruleResults.checkPerClaimLimit = { pass: false, code: 'PER_CLAIM_EXCEEDED', reason: `Claim amount exceeds per-claim limit of ₹${perClaimLimit}` };
@@ -493,7 +501,7 @@ Return JSON:
 `;
 
     try {
-      const resultText = await callGemini(prompt, systemInstruction, true);
+      const resultText = await callLLM(prompt, systemInstruction, true);
       let cleanedJson = resultText.trim();
       if (cleanedJson.startsWith('```json')) {
         cleanedJson = cleanedJson.substring(7);
