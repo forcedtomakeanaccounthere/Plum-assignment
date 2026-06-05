@@ -33,6 +33,32 @@ RUN npm install
 COPY . .
 RUN npm run build
 
+# Final Stage
+FROM node:20-slim
+
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    poppler-utils \
+    tesseract-ocr \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy venv and dist from builder
+COPY --from=0 /opt/venv /opt/venv
+COPY --from=0 /app/dist /app/dist
+COPY --from=0 /app/package*.json ./
+COPY --from=0 /app/medical_doc_generator /app/medical_doc_generator
+COPY --from=0 /app/scripts /app/scripts
+COPY --from=0 /app/uploads /app/uploads
+
+ENV PATH="/opt/venv/bin:$PATH"
+RUN npm install --omit=dev
+
 # Environment settings
 ENV NODE_ENV=production
 ENV PORT=3001
@@ -42,4 +68,4 @@ ENV PYTHON_PATH=python3
 EXPOSE 3001
 
 # Run the app
-CMD ["npm", "start"]
+CMD ["node", "dist/app.js"]
