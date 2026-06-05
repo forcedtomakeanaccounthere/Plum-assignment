@@ -1,12 +1,40 @@
-FROM python:3.12
+FROM node:20-slim
 
+# Install Python, Poppler, and Tesseract OCR
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
     poppler-utils \
-    tesseract-ocr
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Set up working directory
+WORKDIR /app
 
+# Create a virtual environment for Python dependencies
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy Python requirements and install
+COPY scripts/requirements-ocr.txt ./scripts/
+COPY medical_doc_generator/requirements.txt ./medical_doc_generator/
+RUN pip install --no-cache-dir -r scripts/requirements-ocr.txt
+RUN pip install --no-cache-dir -r medical_doc_generator/requirements.txt
+
+# Copy package files and install Node dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy source code and build
 COPY . .
+RUN npm run build
 
-CMD ["python", "app.py"]
+# Expose backend port
+EXPOSE 3001
+
+# Command to run the backend application
+ENV PYTHON_PATH=python3
+ENV NODE_ENV=production
+
+CMD ["npm", "start"]
